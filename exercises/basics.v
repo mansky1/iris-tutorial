@@ -7,51 +7,10 @@ From iris.proofmode Require Import proofmode.
 (* ================================================================= *)
 (** ** Introduction *)
 
-(**
-  In short, Iris is a `higher-order concurrent separation logic
-  framework'. That is quite a mouthful, so let us break it down.
-
-  Firstly, the `framework' part means that Iris is not tied to any
-  single programming language – it consists of a base logic and can be
-  instantiated with any language one sees fit.
-
-  Secondly, a separation logic is a logic used to reason about programs
-  by introducing a notion of resource ownership. The idea is that one
-  must own a resource before one can interact with it. Ownership is
-  generally exclusive but can be transferred. To support this notion,
-  separation logic introduces a new connective called separating
-  conjunction, written [P ∗ Q]. This asserts ownership of the resources
-  described by propositions [P] and [Q], and, in particular, [P] and [Q]
-  describe separate resources. So what is a resource? In Iris, we may
-  define our own notion of resources by creating a so-called `resource
-  algebra', which we discuss later. For languages with a heap, a
-  canonical example of a resource is a heap fragment. Owning a resource
-  then amounts to `controlling' a fragment of the heap, allowing one to
-  read and update the associated locations.
-
-  Thirdly, a concurrent separation logic (CSL) extends on the above by
-  adding rules supporting concurrent constructions, such as `Fork'. As
-  ownership is exclusive, a program that spawns threads must decide how
-  to separate and delegate its resources to its threads, so that they
-  may perform their desired actions.
-
-  Finally, `higher-order' refers to the fact that predicates may depend
-  on other predicates. Being a program logic means that programs are
-  proved correct with respect to some specification – a description of
-  the program's behavior and interaction with resources. As programs are
-  usually composed of other programs, we would want our specifications
-  to be generic so that they may be used in a myriad of contexts. Having
-  support for higher-order predicates means that program specifications
-  can be parametrized by arbitrary propositions. This allows one to
-  write specifications for libraries independently of their clients –
-  the clients will instantiate the propositions to specialize the
-  specification to fit their needs.
-
-  In this chapter, we introduce basic separation logic in Iris.
-*)
+(** In this chapter, we introduce basic separation logic in Iris. *)
 
 (* ================================================================= *)
-(** ** Iris in Coq *)
+(** ** Iris in Rocq *)
 
 (**
   The type of propositions in Iris is [iProp Σ]. All proofs in Iris are
@@ -60,85 +19,54 @@ From iris.proofmode Require Import proofmode.
   introduce resource algebras. For now, just remember to work inside a
   section with a [Σ] in its context. Keep in mind that [Σ] has type
   [gFunctors] plural, not [gFunctor] singular. There is a coercion from
-  gFunctor to gFunctors, so everything will seem to work until [Σ]
-  becomes relevant if you accidentally use [gFunctor].
+  gFunctor to gFunctors, so if you accidentally use [gFunctor] everything
+  will seem to work until [Σ] becomes relevant.
 *)
 Section proofs.
 Context {Σ: gFunctors}.
 
 (**
-  Iris defines two Coq propositions for proving Iris propositions:
-  - [⊢ P] asks whether [P] holds with no assumptions
-  - [P ⊢ Q] asks whether [Q] holds assuming [P]
+  The theorems we can prove in Iris have the form [P ⊢ Q] (type \vdash), saying that
+  the separation logic assertion [P] implies the assertion [Q].
 
-  Iris is built on top of Coq, so to smoothen the experience, we will be
-  working with the Iris Proof Mode (IPM). The practical implication of
-  this is that we get a new context, called the spatial context, in
+  Iris is built on top of Rocq, and has a custom interface called the
+  Iris Proof Mode (IPM). IPM has its own versions of basic Rocq tactics,
+  which maintain a new context, called the spatial context, in
   addition to the usual context, now called the non-spatial context.
   Hypotheses from both contexts can be used to prove the goal.
 
-  The regular Coq tactics can still be used when we work within the
-  non-spatial context, but, in general, we shall use new tactics that
+  The regular Rocq tactics can still be used when we work within the
+  non-spatial context, but, in general, we shall use the new tactics that
   work natively with the spatial context. These new tactics start with
   'i', and since many of them simply 'lift' the regular tactics to also
   work with the spatial context, they borrow the regular names but with
   the 'i' prefixed. For instance, instead of [intros H] we use
   [iIntros "H"], and instead of [apply H] we use [iApply "H"]. Note that
   identifiers for hypotheses in the spatial context are strings, instead
-  of the usual Coq identifiers.
+  of the usual Rocq identifiers.
 
   To see this in action we will prove the statement [P ⊢ P], for all
   [P].
 *)
 
 Lemma asm (P : iProp Σ) : P ⊢ P.
-Proof.
+Proof. 
   (**
-    To enter the Iris Proof Mode, we can use the tactic [iStartProof].
-    However, most Iris tactics will automatically start the Iris Proof
-    Mode for you, so we can directly introduce [P].
+    We can begin by introducing [P].
   *)
   iIntros "H".
   (**
     This adds [P] to the spatial context with the identifier ["H"]. To
-    finish the proof, one would normally use either [exact] or [apply].
+    finish the proof in Rocq, one would use either [exact] or [apply].
     So in Iris, we use either [iExact] or [iApply].
   *)
   iApply "H".
 Qed.
 
-(* ----------------------------------------------------------------- *)
-(** *** Technical Details *)
-
-(**
-  In Coq, the context and the goal is a sequent (we use [⊢ₓ] for
-  the Coq entailment to distinguish it from the Iris entailment [⊢]):
-
-                    [H₁ : Φ₁, ..., Hₙ : Φₙ ⊢ₓ Ψ]
-
-  Here, the left-hand side of the Coq entailment [⊢ₓ] is the
-  (non-spatial) context and the right-hand side is the goal. This
-  sequent is equivalent to the entailment [Φ₁ ∧ ... ∧ Φₙ ⊢ₓ Ψ].
-
-  The Iris Proof Mode mimics this in the sense that the spatial context
-  and the goal is an Iris sequent:
-
-                    ["H₁" : Φ₁, ..., "Hₙ" : Φₙ ⊢ Ψ]
-
-  However, as Iris is a separation logic, this is equivalent to the
-  entailment [Φ₁ ∗ ... ∗ Φₙ ⊢ Ψ].
-
-  Technically, since Iris is built on top of Coq, proving an Iris
-  entailment in Coq corresponds to proving [⊢ₓ (P ⊢ Q)]. In other
-  words, the spatial context is part of the Coq goal. This is the reason
-  why the regular Coq tactics no longer suffice. The new tactics work
-  with both the non-spatial and the spatial contexts.
-*)
-
 (**
   Iris propositions include many of the usual logical connectives such
-  as conjunction [P ∧ Q]. As such, Iris uses a notation scope to
-  overload the usual logical notation in Coq. This scope is delimited by
+  as conjunction [P ∧ Q] (type \and). As such, Iris uses a notation scope to
+  overload the usual logical notation in Rocq. This scope is delimited by
   [I] and bound to [iProp Σ]. Hence, you may need to wrap your
   propositions in [(_)%I] to use the notations.
 *)
@@ -164,9 +92,9 @@ Definition and_success (P Q : iProp Σ) := (P ∧ Q)%I.
 
 (**
   The core connective in separation logic is the `separating
-  conjunction', written [P ∗ Q], for propositions [P] and [Q].
-  Separating conjunction differs from regular conjunction, particularly
-  in its introduction rule:
+  conjunction', written [P ∗ Q] (type \sep or \star), for propositions
+  [P] and [Q]. Separating conjunction differs from regular conjunction,
+  particularly in its introduction rule:
 
   [[
         P1 ⊢ Q1⠀⠀⠀⠀⠀⠀P2 ⊢ Q2
@@ -226,8 +154,8 @@ Proof.
 Admitted.
 
 (**
-  Just as with Coq tactics, Iris allows nesting of introduction
-  patterns. In fact, like Coq, Iris supports patterns of the form
+  Just as with Rocq tactics, Iris allows nesting of introduction
+  patterns. In fact, like Rocq, Iris supports patterns of the form
   [(H1 & .. & H2 & H3)] as a shorthand for [[H1 .. [H2 H3] ..]].
 
   Exercise: try to use an introduction with a pattern of parentheses to
@@ -249,7 +177,8 @@ Admitted.
 *)
 Lemma sep_comm_v2 (P Q : iProp Σ) : P ∗ Q ⊢ Q ∗ P.
 Proof.
-  iIntros "[HP HQ]".
+  iIntros "H".
+  iDestruct "H" as "[HP HQ]".
   iFrame.
 Qed.
 
@@ -270,7 +199,8 @@ Qed.
 
 Lemma wand_adj_1 (P Q R : iProp Σ) : (P -∗ Q -∗ R) ∗ P ∗ Q ⊢ R.
 Proof.
-  iIntros "(H & HP & HQ)".
+  iIntros "H".
+  iDestruct "H" as "(H & HP & HQ)".
   (**
     When applying ["H"], we get the subgoals [P] and [Q]. To specify that
     we want to use ["HP"] to prove the first subgoal, and ["HQ"] the second,
@@ -293,7 +223,7 @@ Proof.
 Admitted.
 
 (**
-  Disjunctions [∨] are treated just like disjunctions in Coq. The
+  Disjunctions [∨] are treated just like disjunctions in Rocq. The
   introduction pattern [[ _ | _ ]] allows us to eliminate a disjunction,
   while the tactics [iLeft] and [iRight] let us introduce them.
 
@@ -324,28 +254,29 @@ Proof.
 Admitted.
 
 (**
-  Iris has existential and universal quantifiers over any Coq type.
+  Iris has existential and universal quantifiers over any Rocq type.
   Existential quantifiers are proved using the [iExists] tactic, using
   the same syntax as for [exists]. Elimination of existentials is done
   through the pattern ["[%_ _]"] or as part of a ["(_&..&_)"] with a [%]
-  in front of the existential variable.
+  in front of the existential variable. (type \exists)
 *)
 Lemma sep_ex_distr {A} (P : iProp Σ) (Φ : A → iProp Σ) :
   (P ∗ ∃ x, Φ x) ⊣⊢ ∃ x, P ∗ Φ x.
 Proof.
   iSplit.
-  - iIntros "(HP & %x & HΦ)".
+  - iIntros "H".
+    iDestruct "H" as "(HP & %x & HΦ)".
     iExists x.
     iFrame.
   - (* exercise *)
 Admitted.
 
 (**
-  Likewise, forall quantification works almost as in Coq. To introduce
+  Likewise, forall quantification works almost as in Rocq. To introduce
   universally quantified variables, you can either use [iIntros (x y z)]
   or [iIntros "%x %y %z"]. These patterns are interchangeable. To
   specify the parameters of hypotheses, we write
-  [iApply ("H" $! x y z)].
+  [iApply ("H" $! x y z)]. (type \forall)
 *)
 Lemma sep_all_distr {A} (P Q : A → iProp Σ) :
   (∀ x, P x) ∗ (∀ x, Q x) -∗ (∀ x, P x ∗ Q x).

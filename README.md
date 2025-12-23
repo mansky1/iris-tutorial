@@ -13,8 +13,8 @@ The tutorial consists of several chapters, each corresponding to a Rocq file. Th
 ## Setup
 This version is known to compile with
 
-- Rocq 8.20.1
-- Iris 4.3.0
+- Rocq 9.0
+- Iris 4.4.0
 
 The recommended way to install the dependencies is through [opam](https://opam.ocaml.org/doc/Install.html).
 

@@ -14,46 +14,9 @@ From iris.heap_lang Require Import lang notation spawn par.
   and it is a call-by-value language.
 
   The syntax for HeapLang is fairly standard, but there are some quirks
-  as we are working inside Coq. As the features of HeapLang are fairly
+  as we are working inside Rocq. As the features of HeapLang are fairly
   standard, the focus in this chapter is mainly on showcasing the syntax
   of the language through simple examples.
-*)
-
-(* ================================================================= *)
-(** ** The HeapLang Interpreter (Optional) *)
-
-(**
-  HeapLang is primarily made to be reasoned about using Iris. However,
-  there is a rudimentary interpreter for HeapLang located in
-  [iris.unstable.heap_lang]. The interpreter provides the function
-  [exec], which takes as input some fuel and an expression. The
-  expression is then executed until it terminates at a value [v], the
-  execution runs out of fuel, or the program gets stuck. In case of
-  termination, [inl v] is returned. Otherwise [inr err] is returned,
-  with [err] describing the error.
-*)
-
-(**
-  By default, the interpreter is not installed as it can only be used
-  with development versions of Iris. The interpreter is not required for
-  the tutorial, but it can optionally be installed for this chapter. To
-  install it, run:
-
-    <<opam install coq-iris-unstable>>
-
-  This also updates Iris to a development version. To access the
-  interpreter, uncomment the import below.
-*)
-
-(* From iris.unstable.heap_lang Require Import interpreter. *)
-
-(**
-  To return to a release version of Iris known to be compatible with the
-  rest of the tutorial, run:
-
-    <<opam install . --deps-only>>
-
-  This also uninstalls the interpreter.
 *)
 
 (* ================================================================= *)
@@ -73,7 +36,7 @@ Example arith : expr :=
 (**
   If the interpreter was installed, the expression can now be executed
   using [(exec 10 arith)], where [10] is the amount of fuel. To evaluate
-  the execution inside Coq, we can use the [Compute] command. Uncomment
+  the execution inside Rocq, we can use the [Compute] command. Uncomment
   the command below to see this in action.
 *)
 (* Compute (exec 10 arith). *)
@@ -275,18 +238,6 @@ Example fork : expr :=
   let: "l" := ref #5 in
   Fork ("l" <- #7) ;;
   !"l".
-
-(**
-  Unfortunately, in its current state, the HeapLang interpreter does not
-  support concurrency; the forked thread never executes its expression.
-  Hence, the above program will always return [5]. Of course, this is
-  only a limitation of this specific interpreter – HeapLang is still a
-  concurrent programming language, and we still have to reason about
-  forked threads inside the Iris logic.
-*)
-
-(* Compute (exec 10 fork). *)
-(** Evaluates to [inl #5] *)
 
 (**
   From the [Fork] primitive, we can implement several other

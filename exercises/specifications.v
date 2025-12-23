@@ -30,29 +30,64 @@ Section specifications.
 Context `{!heapGS Σ}.
 
 (* ================================================================= *)
-(** ** Weakest Precondition *)
+(** ** Hoare Triples and Weakest Preconditions *)
 
 (**
-  The first construct for specifying program behaviour that we shall use
-  is the `weakest precondition'. To motivate it, let us consider a
-  simple example.
+  How do we state the correctness of a program? One common way is with a pre-
+  and postcondition, e.g., with a Hoare triple [{ P } e { Q }], which says
+  that if we start with resources [P], we can run [e] and end in a state with
+  resources [Q]. In Iris, this is a derived form built out of several pieces:
+  "we can run [e] and end in a state with resources [Q]" is an assertion
+  [WP e {{ Q }}], and the Hoare triple is defined as [P ⊢ WP e {{ Q }}].
+  (WP stands for "weakest precondition", i.e., "we have enough resources to run
+  [e] and prove [Q] but no more.") To make triples easier to apply as lemmas,
+  Iris also quantifies over all possible postconditions implied by [Q] (we will
+  see this concretely in the coming examples).
+
+  The full syntax for Hoare triples is as follows:
+    [{{{ P }}} e {{{ r0 .. rn, RET v; Q v }}}]
+  - [P]: the precondition that is assumed to hold before the program runs.
+  - [e]: the program to run.
+  - [r0 .. rn]: optional, forall quantified variables used for abstract
+    return values.
+  - [v]: the return value.
+  - [Q]: the postcondition which holds after the program terminates.
+
+  Formally, this syntax is defined as
+
+    [□( ∀ Φ, P -∗ ▷ (∀ r0 .. rn, Q -∗ Φ v) -∗ WP e {{v, Φ v }})]
+
+  For any desired postcondition [Φ], if we have the precondition [P], and
+  [Φ] follows from the postcondition [Q], then we have enough resources to
+  run [e] and conclude [Φ] at the end. The modalities [□] and [▷] can be
+  ignored for now.
 *)
 
 Example arith : expr :=
   #1 + #2 * #3 + #4 + #5.
 
 (**
-  This program should evaluate to [16]. We can express this in the logic
-  with a weakest precondition. In general, a weakest precondition has
-  the form [WP e {{v, Φ v}}]. This asserts that if the HeapLang program
-  [e] terminates at some value [v], then [v] satisfies the predicate
-  [Φ]. The double curly brackets [{{v, Φ v}}] is called the
-  `postcondition'. For the case of [arith], we would express its
-  behaviour using the following weakest precondition.
+  What specifications does this program meet? There are several:
+  * it runs without crashing
+  * it returns a number
+  * it returns specifically the number 16
+  We can express each of these in the logic as Hoare triples:
+  {{{ True }}} arith {{{ RET v; True }}}
+  {{{ True }}} arith {{{ z : Z, RET #z; True }}}
+  {{{ True }}} arith {{{ RET #16; True }}}
+    (or equivalently, {{{ True }}} arith {{{ v, RET v; ⌜v = #16⌝ }}})
+  All of these are provable; the last one is the *strongest*, since it gives
+  the most information about [arith].
 *)
 
-Lemma arith_spec : ⊢ WP arith {{ v, ⌜v = #16⌝ }}.
+Lemma arith_spec : {{{ True }}} arith {{{ RET #16; True }}}.
 Proof.
+  (** Because of the structure of the Hoare triple definition, we will always
+    begin by introducing three pieces: the arbitrary postcondition [Φ] (a pure
+    variable), the precondition, and the "postcondition implication" saying
+    that we can prove [Φ] by proving the function's postcondition. *)
+  iIntros "%Φ H HΦ".
+  (** Now our goal is a WP assertion. *)
   rewrite /arith.
   (**
     To prove this weakest precondition, we can use the tactics provided
@@ -62,10 +97,10 @@ Proof.
   *)
   wp_op.
   (**
-    Note that the expression [#2 * #3] turned into [#(2 * 3)] – the Coq
+    Note that the expression [#2 * #3] turned into [#(2 * 3)] – the Rocq
     expression [2 * 3] is treated as a value in HeapLang.
 
-    In particular, [wp_op] has here applied three underlying rules:
+    Under the hod, [wp_op] has here applied three underlying rules:
     wp-bind, wp-op, and wp-val. The rule wp-bind allows us to `focus' on
     some sub-expression [e], which is the next part to be evaluated
     according to some evaluation context [K]. The rule is as follows:
@@ -74,14 +109,14 @@ Proof.
 
     This allows us to change the goal from
 
-    [WP (#1 + #2 * #3 + #4 + #5) {{ v, ⌜v = #16⌝ }}]
+    [WP (#1 + #2 * #3 + #4 + #5) {{ v, Φ v }}]
 
     to
 
-    [WP #2 * #3 {{ w, WP (#1 + [] + #4 + #5)[w] {{ v, ⌜v = #16⌝ }} }}]
+    [WP #2 * #3 {{ w, WP (#1 + [] + #4 + #5)[w] {{ v, Φ v }} }}]
 
     Next, the wp-op rule symbolically executes a single arithmetic
-    operation, [⊚].
+    operation, written as [⊚].
     [[
                               v = v₁ ⊚ v₂
                 -------------------------------------------
@@ -90,7 +125,7 @@ Proof.
 
     We can thus perform the multiplication and change the goal to
 
-    [WP #(2 * 3) {{ w, WP (#1 + [] + #4 + #5)[w] {{ v, ⌜v = #16⌝ }} }}]
+    [WP #(2 * 3) {{ w, WP (#1 + [] + #4 + #5)[w] {{ v, Φ v }} }}]
 
     Finally, wp-val states that we can prove a weakest precondition of a
     value by proving the postcondition specialised to that value.
@@ -99,7 +134,7 @@ Proof.
 
     The goal is changed to
 
-    [WP #1 + #(2 * 3) + #4 + #5 {{ v, ⌜v = #16⌝ }}]
+    [WP #1 + #(2 * 3) + #4 + #5 {{ v, Φ v }}]
 
     This is where [wp_op] has taken us. The next step of the program is
     to add [#1] to [#(2 * 3)]. We could again use [wp_op] to
@@ -124,40 +159,21 @@ Proof.
     [iModIntro].
   *)
   iModIntro.
-  iPureIntro.
-  reflexivity.
+  (** Now we must prove the arbitrary postcondition [Φ]; the only way to
+    do this is by using the implication [HΦ], i.e., proving the postcondition
+    we wrote in the specification. *)
+  iApply "HΦ".
+  done.
 Qed.
 
-(**
-  Let us look at another example of a pure program. The `lambda' program
-  from lang.v consists of only let expressions, lambdas, applications,
-  and arithmetic.
-*)
+(** Let's try another example. *)
+Definition arith2 : expr :=
+  let: "x" := #1 + #2 * #3 in
+  let: "y" := #4 * #5 in
+  "y" - "x".
 
-Example lambda : expr :=
-  let: "add5" := (λ: "x", "x" + #5) in
-  let: "double" := (λ: "x", "x" * #2) in
-  let: "compose" := (λ: "f" "g", (λ: "x", "g" ("f" "x"))) in
-  ("compose" "add5" "double") #5.
-
-(**
-  The program logic for HeapLang provides specific tactics to
-  symbolically execute these kinds of expressions, e.g. [wp_let] for let
-  expressions, [wp_lam] for applications, and [wp_op] for arithmetic. A
-  list of all tactics for HeapLang expressions can be found at
-
-  <<https://gitlab.mpi-sws.org/iris/iris/-/blob/master/docs/heap_lang.md#tactics>>
-
-  These tactics similarly apply the underlying rules of the logic,
-  however, we shall from now on refrain from explicitly mentioning the
-  rules applied. Through experience, the reader should get an intuition
-  for how each tactic manipulates the goal.
-
-  Exercise: prove the following specification for the lambda program.
-*)
-Lemma lambda_spec : ⊢ WP lambda {{ v, ⌜v = #20⌝ }}.
+Lemma arith2_spec : {{{ True }}} arith2 {{{ RET #13; True }}}.
 Proof.
-  rewrite /lambda.
   (* exercise *)
 Admitted.
 
@@ -168,10 +184,10 @@ Admitted.
   In this section, we introduce our first notion of a resource: the
   resource of heaps. As mentioned in basics.v, propositions in Iris
   describe/assert ownership of resources. To describe resources in the
-  resource of heaps, we use the `points-to' predicate, written [l ↦ v].
-  Intuitively, this describes all heap fragments that have value [v]
-  stored at location [l]. The proposition [l1 ↦ #1 ∗ l2 ↦ #2] then
-  describes all heap fragments that map [l1] to [#1] and [l2] to [#2].
+  resource of heaps, we use the `points-to' predicate, written [l ↦ v]
+  (type \mapsto). Intuitively, this describes all heap fragments that have
+  value [v] stored at location [l]. The proposition [l1 ↦ #1 ∗ l2 ↦ #2]
+  then describes all heap fragments that map [l1] to [#1] and [l2] to [#2].
 
   To see this in action, let us consider a simple program.
 *)
@@ -184,11 +200,11 @@ Definition prog : expr :=
   !"x".
 
 (**
-  This program should evaluate to [3]. We express this with a weakest
-  precondition.
+  This program should evaluate to [3]. We express this with a Hoare triple.
 *)
-Lemma prog_spec : ⊢ WP prog {{ v, ⌜v = #3⌝ }}.
+Lemma prog_spec : {{{ True }}} prog {{{ RET #3; True }}}.
 Proof.
+  iIntros "%Φ H HΦ".
   rewrite /prog.
   (**
     The initial step of [prog] is to allocate a reference containing the
@@ -223,82 +239,9 @@ Proof.
   wp_load.
   (** Now we are left with a trivial proof that [1 + 2 = 3]. *)
   iModIntro.
+  iApply "HΦ".
   done.
 Qed.
-
-(**
-  HeapLang also provides the [CmpXchg] instruction to interact with the
-  heap. The [wp_cmpxchg] symbolically executes an instruction on the
-  form [CmpXchg l v1 v2]. As with [wp_load] and [wp_store], [wp_cmpxchg]
-  requires the associated points-to predicate [l ↦ v]. If this is
-  present in the context, then [wp_cmpxchg as H1 | H2] will generate two
-  subgoals. The first corresponds to the case where the [CmpXchg]
-  instruction succeeded. Thus, we get to assume [H1 : v = v1], and our
-  points-to predicate for [l] is updated to [l ↦ v2]. The second
-  corresponds to the case where [CmpXchg] failed. We instead get
-  [H2 : v ≠ v1], and our points-to predicate for [l] is unchanged.
-
-  Let us demonstrate this with a simple example program which simply
-  checks if a given location contains the number 0 and, if it does,
-  updates it to 10.
-*)
-
-Example cmpXchg_0_to_10 (l : loc) : expr := (CmpXchg #l #0 #10).
-
-Lemma cmpXchg_0_to_10_spec (l : loc) (v : val) :
-  l ↦ v -∗
-  WP (cmpXchg_0_to_10 l) {{ u, (⌜v = #0⌝ ∗ l ↦ #10) ∨
-                               (⌜v ≠ #0⌝ ∗ l ↦ v) }}.
-Proof.
-  iIntros "Hl".
-  wp_cmpxchg as H1 | H2.
-  - (* CmpXchg succeeded *)
-    iLeft.
-    by iFrame.
-  - (* CmpXchg failed *)
-    iRight.
-    by iFrame.
-Qed.
-
-(**
-  If it is clear that a [CmpXchg] instruction will succeed, then we can
-  apply the [wp_cmpxchg_suc] tactic which will immediately discharge the
-  case where [CmpXchg] fails. Similarly, we can use [wp_cmpxchg_fail]
-  when a [CmpXchg] instruction will clearly fail.
-
-  Recall the [cas] example from lang.v
-*)
-
-Example cas : expr :=
-  let: "l" := ref #5 in
-  if: CAS "l" #6 #7 then
-    #()
-  else
-    let: "a" := !"l" in
-    if: CAS "l" #5 #7 then
-      let: "b" := !"l" in
-      ("a", "b")
-    else
-      #().
-
-(**
-  The result of both [CAS] instructions is predetermined. Hence, we can
-  use the [wp_cmpxchg_suc] and [wp_cmpxchg_fail] tactics to symbolically
-  execute them (remember that [CAS l v1 v2] is syntactic sugar for
-  [Snd (CmpXchg l v1 v2)]).
-  Exercise: finish the proof of the specification for [cas].
-*)
-
-Lemma cas_spec : ⊢ WP cas {{ v, ⌜v = (#5, #7)%V⌝ }}.
-Proof.
-  rewrite /cas.
-  wp_alloc l as "Hl".
-  wp_let.
-  wp_cmpxchg_fail.
-  wp_proj.
-  wp_if.
-  (* exercise *)
-Admitted.
 
 (**
   We finish this section with a final remark about the points-to
@@ -327,122 +270,34 @@ Qed.
   Let us use the specification we proved for [prog] in the previous
   section to prove a specification for a larger program.
 *)
-Lemma prog_add_2_spec : ⊢ WP prog + #2 {{ v, ⌜v = #5⌝ }}.
+Lemma prog_add_2_spec : {{{ True }}} prog + #2 {{{ RET #5; True }}}.
 Proof.
-  iStartProof.
+  iIntros "%Φ H HΦ".
   (**
     The first part of this program is to evaluate [prog]. We already
     have a specification that tells us how this sub-expression behaves:
-    [prog_spec]. To apply it, we must change the goal to match the
-    specification. Using the wp-bind rule presented earlier, we can
-    focus in on the [prog] expression. Iris provides the tactic
-    [wp_bind] for this purpose.
+    [prog_spec]. We can apply a previously proved specification with the
+    [wp_apply] tactic. Note that we apply the *specification* lemma, not
+    the program itself; [wp_apply prog] will cause Rocq to hang or crash.
   *)
-  wp_bind prog.
-  (**
-    The expression now matches the [prog_spec] specification, but the
-    postcondition still does not match. To fix this, we can use
-    monotonicity of WP. That is,
-
-      [WP e {{ Φ }} ∗ (∀ v, Φ v -∗ Ψ v) ⊢ WP e {{ Ψ }}].
-
-    With this, it suffices to prove that the postcondition of
-    [prog_spec] implies the postcondition in our current goal. This is
-    achieved with the [wp_wand] lemma, which generates two subgoals, one
-    corresponding to [WP e {{ Φ }}] and one to [(∀ v, Φ v -∗ Ψ v)].
-  *)
-  iApply wp_wand; simpl.
-  { iApply prog_spec. }
-  simpl.
-  (**
-    When introducing equalities, we can immediately rewrite using it
-    with [->] or [<-], depending on which direction we want to rewrite.
-  *)
-  iIntros "%w ->".
+  wp_apply prog_spec.
+  (** This does two things: asks us to prove the precondition of [prog],
+    and replaces [prog] with its postcondition from [prog_spec]. *)
+  { done. }
+  (** Now [prog] has been replaced with its return value #3, and we have
+    its postcondition resources [True]. *)
+  iIntros "Hpost".
   (** And now we can evaluate the rest of the program. *)
   wp_pure.
-  done.
-Qed.
-
-(**
-  The previous proof worked, but it is not very ergonomic. To fix this,
-  we will make [prog_spec] generic on its postcondition.
-*)
-Lemma prog_spec_2 (Φ : val → iProp Σ) :
-  (∀ v, ⌜v = #3⌝ -∗ Φ v) -∗ WP prog {{ v, Φ v }}.
-Proof.
-  iIntros "HΦ".
-  rewrite /prog.
-  wp_alloc l as "Hl".
-  wp_load.
-  wp_store.
-  wp_load.
-  by iApply "HΦ".
-Qed.
-
-(** Now, the other proof becomes simpler. *)
-Lemma prog_add_2_spec' : ⊢ WP prog + #2 {{ v, ⌜v = #5⌝ }}.
-Proof.
-  wp_bind prog.
-  (** The goal is now on the exact form required by [prog_spec_2]. *)
-  iApply prog_spec_2.
-  (** And the proof proceeds as before. *)
-  iIntros "%w ->".
-  wp_pure.
-  done.
-Qed.
-
-(**
-  We can even simplify this proof further by using the [wp_apply]
-  tactic, which automatically applies [wp_bind] for us.
-*)
-Lemma prog_add_2_spec'' : ⊢ WP prog + #2 {{ v, ⌜v = #5⌝ }}.
-  wp_apply prog_spec_2.
-  iIntros "%w ->".
-  wp_pure.
+  iApply "HΦ".
   done.
 Qed.
 
 (* ================================================================= *)
-(** ** Hoare Triples *)
+(** ** Working with Preconditions *)
 
 (**
-  Having studied weakest preconditions, we shift our focus onto another
-  construct for specifying program behaviour: Hoare triples. The weakest
-  precondition does not explicitly specify which conditions must be met
-  before executing the program. It only talks about which conditions are
-  met after – the postcondition. Hoare triples build on weakest
-  preconditions by requiring us to explicitly mention the conditions
-  that must hold before running the program – the precondition.
-
-  The syntax for Hoare triples is as follows:
-    [{{{ P }}} e {{{ r0 .. rn, RET v; Q v }}}]
-  - [P]: the precondition that is assumed to hold before the program runs.
-  - [e]: the program to run.
-  - [r0 .. rn]: optional, forall quantified variables used for abstract
-    return values.
-  - [v]: the return value.
-  - [Q]: the postcondition which holds after the program terminates.
-
-  In Iris, Hoare triples are actually defined in terms of weakest
-  preconditions. The definition is as follows:
-
-    [□( ∀ Φ, P -∗ ▷ (∀ r0 .. rn, Q -∗ Φ v) -∗ WP e {{v, Φ v }})]
-
-  This is quite a lengthy definition, so let us break it down.
-  Firstly, inspired by the [prog_spec_2] example from the previous
-  section, this definition makes the postcondition generic.
-  Next, the precondition [P] implies the generic weakest precondition,
-  signifying that we must first prove [P] before we can apply the
-  specification for [e].
-  Finally, the definition uses two modalities that we have yet to cover.
-  The persistently modality [□] signifies that the specification can be
-  freely duplicated, meaning we can reuse Hoare triples.
-  The later modality [▷] signifies that the program takes at least one
-  step. The reason for including this is purely technical, and can for
-  the most part be ignored.
-  We will get back to both modalities later. For now, let us look at
-  an example. Consider a function that swaps two values.
+  Consider a function that swaps two values.
 *)
 
 Definition swap : val :=
@@ -456,12 +311,11 @@ Lemma swap_spec (l1 l2 : loc) (v1 v2 : val) :
   {{{ l1 ↦ v1 ∗ l2 ↦ v2 }}}
     swap #l1 #l2
   {{{ RET #(); l1 ↦ v2 ∗ l2 ↦ v1 }}}.
+(** Note that [()] is a "nothing" value for functions that don't return
+  a value. *)
 Proof.
-  (**
-    When introducing a Hoare triple, we use the definition above to turn
-    the goal into a weakest precondition.
-  *)
-  iIntros "%Φ [H1 H2] HΦ".
+  iIntros "%Φ H HΦ".
+  iDestruct "H" as "[H1 H2]".
   (** We can now prove the specification as we have done previously. *)
   rewrite /swap.
   wp_pures.
@@ -492,16 +346,16 @@ Proof.
   done.
 Qed.
 
-(**
-  A convention in Iris is to write specifications using Hoare triples
-  but prove them by converting them to weakest preconditions as in the
-  examples above. There are several reasons for this. Firstly, it
-  ensures that all specifications are generic in the postcondition.
-  Secondly, specifications written in terms of Hoare triples are usually
-  easier to read, as they explicitly name what must be obtained before
-  the program can be executed. Finally, proving Hoare triples directly
-  can be quite awkward and burdensome, especially in Coq.
+(** More practice: Here is a program that adds 3 to a memory location.
 *)
+
+Definition add3 : val :=
+  λ: "x",
+  let: "v" := !"x" in
+  "x" <- "v" + #3.
+
+(** Exercise: Write a specification (i.e., a Hoare triple) that add3 satisfies,
+  and prove it. *)
 
 (* ================================================================= *)
 (** ** Concurrency *)
