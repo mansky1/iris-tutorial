@@ -8,12 +8,28 @@ Context `{!heapGS Σ}.
 
 (**
   In this chapter, we will study several functions on linked lists. To
-  do this, we must first agree on what a linked list is. In HeapLang, we
-  can implement linked lists as chains of pointers. We define this
-  formally with a predicate, which we denote [isList]. This predicate
-  turns a list of values [xs] into a predicate describing the structure
-  of the linked list.
+  do this, we must first define what a linked list is. Intuitively, a
+  linked list is a chain of pointers:
+
+  [1 |  ]   [2 |  ]   [3 | X]
+       \____/    \____/
+
+  But what is a pointer? In HeapLang we have locations that can point to
+  values in memory, as in [l ↦ v]. We can see from the diagram that the
+  next pointer of a cell can be either such a location, or a null pointer X.
+  We can represent this with a sum type that is either [SOME l] or [NONE],
+  where [SOME l] represents a non-null pointer l and [NONE] represents a
+  null pointer.
+  
+  Now we can formally define a predicate [isList] that turns a list of
+  values [xs] into a predicate describing the structure of the linked list.
 *)
+
+Notation NONE := (InjL (LitV LitUnit)).
+Notation NONEV := (InjLV (LitV LitUnit)).
+Notation SOME x := (InjR x).
+Notation SOMEV x := (InjRV x).
+
 Fixpoint isList (l : val) (xs : list val) : iProp Σ :=
   match xs with
   | [] => ⌜l = NONEV⌝
@@ -47,10 +63,11 @@ Definition inc : val :=
   of integers. We then map each integer to a HeapLang value using [# _],
   allowing us to use the [isList] predicate.
 *)
+
 Lemma inc_spec (l : val) (xs : list Z) :
-  {{{ isList l ((λ x : Z, #x) <$> xs) }}}
+  {{{ isList l (map (fun x : Z => #x) xs) }}}
     inc l
-  {{{ RET #(); isList l ((λ x, #(x + 1)) <$> xs)}}}.
+  {{{ RET #(); isList l (map (fun x => #(x + 1)) xs)}}}.
 Proof.
   (**
     The proof proceeds by structural induction in [xs]. As [l] changes in each
@@ -60,7 +77,8 @@ Proof.
   revert l.
   induction xs as [|x xs' IH]; simpl.
   - (* Base Case: xs = [] *)
-    iIntros (l) "%Φ -> HΦ".
+    iIntros (l) "%Φ %H HΦ".
+    rewrite H.
     wp_rec.
     wp_pures.
     by iApply "HΦ".
@@ -214,15 +232,15 @@ Definition sum_list : val :=
     fold_right "f" #0 "l".
 
 Lemma sum_list_spec l xs :
-  {{{isList l ((λ x : Z, #x) <$> xs)}}}
+  {{{isList l (map (fun x : Z => #x) xs)}}}
     sum_list l
-  {{{RET #(foldr Z.add 0 xs); isList l ((λ x : Z, #x) <$> xs)}}}.
+  {{{RET #(foldr Z.add 0 xs); isList l (map (fun x : Z => #x) xs)}}}.
 Proof.
   iIntros (Φ) "Hl HΦ".
   wp_rec; wp_pures.
   wp_apply (fold_right_spec
     (λ x, ∃ i : Z, ⌜x = #i⌝)%I
-    (λ xs y, ∃ ys, ⌜xs = (λ x : Z, #x) <$> ys⌝ ∗ ⌜y = #(foldr Z.add 0 ys)⌝)%I
+    (λ xs y, ∃ ys, ⌜xs = map (fun x : Z => #x) ys⌝ ∗ ⌜y = #(foldr Z.add 0 ys)⌝)%I
     with "[Hl]"
   ).
   - iFrame.

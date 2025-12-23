@@ -6,6 +6,35 @@ From iris.heap_lang Require Import lang proofmode notation.
 (** * Case Study: Spin Lock *)
 
 (* ================================================================= *)
+(** ** Specifications *)
+
+(**
+  What does a lock do? It protects a shared resource. When a thread
+  acquires a lock it gains access to the resource; when it releases
+  the lock it gives up access to the resource.
+
+  !! example program
+
+  How should we specify a lock in separation logic?
+  One common way of thinking about locks is _mutual exclusion_, the
+  property that no two threads hold the lock at the same time. However,
+  separation logic talks about *space* (resources and ownership), not time.
+  So we need to define a resource that no two threads can hold at once.
+*)
+
+(**
+  Acquiring the lock should grant access to the protected resources as
+  well as knowledge that the lock has been locked.
+
+  {{{ is_lock γ v P }}} acquire v {{{ RET #(); locked γ ∗ P }}}.
+
+  Releasing the lock consists of transferring back the protected
+  resources and the [locked] predicate to the lock.
+
+  {{{ is_lock γ v P ∗ locked γ ∗ P }}} release v {{{ RET #(); True }}}.
+*)
+
+(* ================================================================= *)
 (** ** Implementation *)
 
 (**
@@ -113,7 +142,7 @@ Definition is_lock γ v P : iProp Σ :=
   ∃ l : loc, ⌜v = #l⌝ ∗ inv N (lock_inv γ l P).
 
 (* ================================================================= *)
-(** ** Specifications *)
+(** ** Proofs *)
 
 (**
   Making a new lock consists of giving away ownership of the resources

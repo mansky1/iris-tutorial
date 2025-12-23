@@ -72,11 +72,10 @@ graph TD;
   specs --> pers[persistently];
   pers -->  ra[resource algebra];
   pers --> later;
-  pers --> linklist[linked list];
+  specs --> linklist[linked list];
 
-  ra --> invariants;
+  specs --> invariants;
 
-  later --> invariants;
   later --> grp[gr_predicates];
   later --> arrays;
 
@@ -88,7 +87,7 @@ graph TD;
   arrays --> merge[merge sort];
 
   timeless --> cst_ra[custom resource algebra];
-  timeless --> strconc[structured concurrency];
+  invariants --> strconc[structured concurrency];
   timeless --> ccs;
 
   subgraph ccs[Case Studies on Concurrency]
@@ -110,13 +109,13 @@ To get a good understanding of the fundamental concepts of Iris, it is recommend
 2. [pure](/exercises/pure.v)
 3. [lang](/exercises/lang.v)
 4. [specifications](/exercises/specifications.v)
-5. [persistently](/exercises/persistently.v)
+5. [persistently](/exercises/persistently.v) (skipped in CS 472)
 6. [linked_lists](/exercises/linked_lists.v)
-7. [later](/exercises/later.v)
-8. [arrays](/exercises/arrays.v)
-9. [resource_algebra](/exercises/resource_algebra.v)
+7. [later](/exercises/later.v) (skipped in CS 472)
+8. [arrays](/exercises/arrays.v) (skipped in CS 472)
+9. [resource_algebra](/exercises/resource_algebra.v) (skipped in CS 472)
 10. [invariants](/exercises/invariants.v)
-11. [timeless](/exercises/timeless.v)
+11. [timeless](/exercises/timeless.v) (skipped in CS 472)
 12. [structured_conc](/exercises/structured_conc.v)
 13. [counter](/exercises/counter.v)
 14. [spin_lock](/exercises/spin_lock.v)

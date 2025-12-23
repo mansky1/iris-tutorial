@@ -1,6 +1,6 @@
 From iris.algebra Require Import excl.
 From iris.base_logic.lib Require Export invariants token.
-From iris.heap_lang Require Import lang proofmode notation.
+From iris.heap_lang Require Import lang proofmode notation par.
 
 (* ################################################################# *)
 (** * Structured Concurrency *)
@@ -29,43 +29,125 @@ From iris.heap_lang Require Import lang proofmode notation.
   specifications for them.
 *)
 
-(* ================================================================= *)
-(** ** The Fork Construct *)
+(** One simple form of structured concurrency is parallel composition [par].
+  A program [e1 ||| e2] executes [e1] and [e2] in parallel; when both finish,
+  it moves on to the rest of the program. Parallel composition has a very
+  natural spec in separation logic:
+
+                {{{ P1 }}} e1 {{{ Q1 }}}   {{{ P2 }}} e2 {{{ Q2 }}}
+                ---------------------------------------------------
+                    {{{ P1 ∗ P2 }}} e1 ||| e2 {{{ Q1 ∗ Q2 }}}
+  We divide our resources into an [e1] part and an [e2] part, then recombine
+  the results when both are finished. HeapLang's [par_spec] is phrased in
+  terms of WP instead of triples, but otherwise says the same thing. *)
+Check par_spec.
 
 (**
-  Let us begin by revisiting the [Fork] construct. The operation takes
-  an expression [e] as an argument and spawns a new thread that executes
-  [e] concurrently. The operation itself returns the unit value on the
-  spawning thread.
+  Let us try to use the [par] specification to prove a specification for a
+  simple client. The client performs two `fetch and add' operations on
+  the same location in parallel. The expression [FAA "l" #i] atomically
+  fetches the value at location [l], adds [i] to it, and stores the
+  result back in [l].
 
-  [Fork] does not have dedicated tactical support. Instead, we simply
-  apply the lemma [wp_fork] – the specification for [Fork]. The lemma is
-  as follows.
+  Our specification will state that the resulting value is even.
 *)
 
-About wp_fork.
+Definition parallel_add : expr :=
+  let: "r" := ref #0 in
+  (FAA "r" #2)
+  |||
+  (FAA "r" #6)
+  ;;
+  !"r".
+
+Section parallel_add.
+(**
+  We must again assume the presence of the [token] resource algebra as
+  we will be using the [par] specification, which relies on it through
+  [spawn].
+*)
+Context `{!heapGS Σ, !tokenG Σ}.
+Let N := nroot .@ "par_add".
 
 (**
-  For convenience, we include it here as well in `simplified' form.
-
-    [WP e {{_, True}} -∗ ▷ Φ #() -∗ WP Fork e {{v, Φ v}}]
-
-  That is, to show a weakest precondition of [Fork e], we have to show
-  the weakest precondition of [e] for a trivial postcondition. The key
-  point is that we only require the forked-off thread to be safe – we do
-  not care about its return value, hence the trivial postcondition.
+  We will have an invariant stating that [r] points to an even integer.
 *)
+Definition parallel_add_inv (r : loc) : iProp Σ :=
+  ∃ n : Z, r ↦ #n ∗ ⌜Zeven n⌝.
+
+(** Exercise: Could we prove a stronger invariant? *)
+
+Lemma parallel_add_spec :
+  {{{ True }}} parallel_add {{{ n, RET #n; ⌜Zeven n⌝ }}}.
+Proof.
+  iIntros "%Φ _ HΦ".
+  rewrite /parallel_add.
+  wp_alloc r as "Hr".
+  wp_pures.
+  iMod (inv_alloc N _ (parallel_add_inv r) with "[Hr]") as "#I".
+  {
+    iNext.
+    iExists 0.
+    iFrame.
+  }
+  (**
+    We don't need information back from the threads, so we will simply
+    use [λ _, True] as the postconditions. Similarly, we only need the
+    invariant to prove the threads, and since this is in the persistent
+    context, we let the preconditions be [True].
+  *)
+  wp_apply (par_spec (λ _, True%I) (λ _, True%I)).
+  - wp_pure.
+    iInv "I" as "(%n & Hr & >%Hn)".
+    wp_faa.
+    iModIntro.
+    iSplitL "Hr".
+    {
+      iModIntro.
+      iExists (n + 2)%Z.
+      iFrame.
+      iPureIntro.
+      by apply Zeven_plus_Zeven.
+    }
+    done.
+  (* exercise *)
+Admitted.
+
+End parallel_add.
 
 (* ================================================================= *)
 (** ** The Spawn Construct *)
 
 (**
-  The first structured concurrency construct we study is [spawn]. This
-  consists of two functions: [spawn], which spawns a thread and returns
-  a `handle', and [join], which uses the handle to wait for a thread to
-  finish.
+  Another common pattern is usually called "fork-join": we create a thread,
+  let it run for a while, then wait for it to finish and read its result.
+  We will use the name "spawn" instead of "fork", since HeapLang already
+  uses "fork" for the non-returning version. *)
 
-  We define the functions as follows.
+(* !! example program; what should the specs be? *)
+
+(**  Considering this behaviour, we give [spawn] the specification:
+
+  [[
+    {{{ P }}} f #() {{{ v, RET v; Ψ v }}} -∗
+    {{{ P }}} spawn f {{{ h, RET h; join_handle h Ψ }}}
+  ]]
+
+  This states that to get a specification for [spawn f], we first must
+  prove a specification for [f] which captures which resources [f]
+  needs, [P], and what the value [f] terminates at satisfies, [Ψ]. If we
+  can prove such a specification for [f], then, given [P], we can also
+  run [spawn f], which will return a value [h] which satisfies a
+  `join-handle' predicate. This predicate is a promise that if we
+  invoke [join] with [h], then the value we get back satisfies [Ψ]. This
+  is reflected in the specification for [join]:
+
+  [[
+    {{{ join_handle h Ψ }}} join h {{{ v, RET v; Ψ v }}}.
+  ]]
+*)
+
+(** We can define [spawn] and [join] using [Fork] as follows.
 *)
 
 Definition spawn : val :=
@@ -94,27 +176,8 @@ Definition join: val :=
   thread has finished, so it can extract the return value from the
   location.
 
-  Considering this behaviour, we give [spawn] the specification:
-
-  [[
-    {{{ P }}} f #() {{{ v, RET v; Ψ v }}} -∗
-    {{{ P }}} spawn f {{{ h, RET h; join_handle h Ψ }}}
-  ]]
-
-  This states that to get a specification for [spawn f], we first must
-  prove a specification for [f] which captures which resources [f]
-  needs, [P], and what the value [f] terminates at satisfies, [Ψ]. If we
-  can prove such a specification for [f], then, given [P], we can also
-  run [spawn f], which will return a value [h] which satisfies a
-  `join-handle' predicate. This predicate is a promise that if we
-  invoke [join] with [h], then the value we get back satisfies [Ψ]. This
-  is reflected in the specification for [join]:
-
-  [[
-    {{{ join_handle h Ψ }}} join h {{{ v, RET v; Ψ v }}}.
-  ]]
-
-  Let us now prove these specifications.
+  Let us now prove that these implementations meet our specifications
+  for [spawn] and [join].
 *)
 
 Section spawn.
@@ -144,6 +207,7 @@ Definition join_handle1 (h : val) (Ψ : val → iProp Σ) : iProp Σ :=
 Lemma join_spec (h : val) (Ψ : val → iProp Σ) :
   {{{ join_handle1 h Ψ }}} join h {{{ v, RET v; Ψ v }}}.
 Proof.
+  (* !! way too fancy *)
   iIntros (Φ) "(%l & -> & #I) HΦ".
   iLöb as "IH".
   wp_rec.
@@ -288,13 +352,10 @@ Qed.
 End spawn.
 
 (* ================================================================= *)
-(** ** The Par Construct *)
+(** ** Building Par from Spawn *)
 
 (**
-  With [spawn] and [join] defined and their specifications proved, we
-  can move on to study a classical parallel composition operator: [par].
-  Its definition is quite straightforward – building on the [spawn]
-  construct.
+  We can now rebuild the [par] operator from [spawn] and [join].
 *)
 Definition par : val :=
   λ: "f1" "f2",
@@ -308,7 +369,7 @@ Notation "e1 ||| e2" := (par (λ: <>, e1)%E (λ: <>, e2)%E) : expr_scope.
 Notation "e1 ||| e2" := (par (λ: <>, e1)%V (λ: <>, e2)%V) : val_scope.
 
 (**
-  Our desired specification for [par] is going to look as follows:
+  As above, our desired specification for [par] is going to look as follows:
 
   [[
     {{{ P1 }}} e1 {{{ v, RET v; Ψ1 v }}} -∗
@@ -318,10 +379,7 @@ Notation "e1 ||| e2" := (par (λ: <>, e1)%V (λ: <>, e2)%V) : val_scope.
 
   The rule states that we can run [e1] and [e2] in parallel if they have
   _disjoint_ footprints and that we can verify the two components
-  separately. For this reason, the rule is sometimes also referred to as
-  the _disjoint concurrency rule_.  Note that this specification looks
-  slightly different from the specification in the [par] library:
-  [wp_par]. However, the differences are mainly notational.
+  separately.
 *)
 
 Section par.
@@ -385,74 +443,3 @@ Proof.
 Qed.
 
 End par.
-
-(**
-  Let us try to use the [par] specification to prove a specification for a
-  simple client. The client performs two `fetch and add' operations on
-  the same location in parallel. The expression [FAA "l" #i] atomically
-  fetches the value at location [l], adds [i] to it, and stores the
-  result back in [l].
-
-  Our specification will state that the resulting value is even.
-*)
-
-Definition parallel_add : expr :=
-  let: "r" := ref #0 in
-  (FAA "r" #2)
-  |||
-  (FAA "r" #6)
-  ;;
-  !"r".
-
-Section parallel_add.
-(**
-  We must again assume the presence of the [token] resource algebra as
-  we will be using the [par] specification, which relies on it through
-  [spawn].
-*)
-Context `{!heapGS Σ, !tokenG Σ}.
-Let N := nroot .@ "par_add".
-
-(**
-  We will have an invariant stating that [r] points to an even integer.
-*)
-Definition parallel_add_inv (r : loc) : iProp Σ :=
-  ∃ n : Z, r ↦ #n ∗ ⌜Zeven n⌝.
-
-Lemma parallel_add_spec :
-  {{{ True }}} parallel_add {{{ n, RET #n; ⌜Zeven n⌝ }}}.
-Proof.
-  iIntros "%Φ _ HΦ".
-  rewrite /parallel_add.
-  wp_alloc r as "Hr".
-  wp_pures.
-  iMod (inv_alloc N _ (parallel_add_inv r) with "[Hr]") as "#I".
-  {
-    iNext.
-    iExists 0.
-    iFrame.
-  }
-  (**
-    We don't need information back from the threads, so we will simply
-    use [λ _, True] as the postconditions. Similarly, we only need the
-    invariant to prove the threads, and since this is in the persistent
-    context, we let the preconditions be [True].
-  *)
-  wp_apply (par_spec (True%I) (True%I) _ _ (λ _, True%I) (λ _, True%I)).
-  - iIntros (Φ') "!> _ HΦ'".
-    iInv "I" as "(%n & Hr & >%Hn)".
-    wp_faa.
-    iModIntro.
-    iSplitL "Hr".
-    {
-      iModIntro.
-      iExists (n + 2)%Z.
-      iFrame.
-      iPureIntro.
-      by apply Zeven_plus_Zeven.
-    }
-    by iApply "HΦ'".
-  (* exercise *)
-Admitted.
-
-End parallel_add.

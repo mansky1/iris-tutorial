@@ -35,6 +35,11 @@ Proof.
     between the threads.
   *)
   wp_apply (wp_fork with "[Hl]").
+  - iNext.
+    wp_store.
+    done.
+  - wp_pures.
+    Fail wp_load.
   (**
     As such, we must pick a thread to own [l]. But as both threads need
     to access [l], we are stuck.
@@ -48,29 +53,28 @@ Section inv_intro.
 
 (**
   As the above program illustrates, some resources are required by
-  multiple threads simultaneously. If those resources are not shareable
-  (i.e. persistent), then we will get stuck, as in the example above. To
-  get around this problem, we can devise an invariant for said
-  resources. That is, we come up with a proposition [P] which describes
-  the resources in a way that is always true, no matter where in the
-  program we are or how threads have interleaved. We can then use Iris'
-  invariant functionality to assert that [P] is an invariant: [inv N P].
+  multiple threads simultaneously. If those resources are not shareable,
+  then we will get stuck, as in the example above. To get around this problem,
+  we can devise an invariant for said resources. That is, we come up with a
+  proposition [P] which describes the resources in a way that is always true,
+  no matter where in the program we are or how threads have interleaved. We
+  can then use Iris's invariant functionality to assert that [P] is an
+  invariant: [inv N P].
   Here, [N] is a `namespace', which we may think of as the name of the
   invariant.
 
-  The key property of invariants that solve our problem is that they are persistent.
-*)
-
-Lemma inv_persist (N : namespace) (P : iProp Σ) :
-  Persistent (inv N P).
-Proof. apply _. Qed.
-
-(**
+  The key property of invariants that solve our problem is that they are
+  persistent, i.e., shareable. Persistent resources have special status
+  in Iris's logic: like pure resources (but unlike memory), they are always
+  true once introduced and can be duplicated arbitrarily.
   Thus, if we can come up with a proposition [P] describing our
   resources correctly throughout the entire program, then we can
   _allocate_ [P] as an invariant, and supply said invariant to the
   threads requiring access to the resources described by [P]. To access
   [P] from the invariant, threads must then _open_ the invariant.
+  Another way of thinking about invariants is as a rely-guarantee
+  specification: as long as all other threads promise to keep [P] true
+  at all times, then this thread will also keep [P] true at all times.
 
   The next two sub-sections cover how to open and allocate invariants.
 *)
@@ -79,9 +83,10 @@ Proof. apply _. Qed.
 (** *** Opening Invariants *)
 
 (**
-  Once we have an invariant [inv N P], we can use the [iInv] tactic to
-  _open_ the invariant, granting us access to [P]. To ensure soundness
-  of the logic, there are some restrictions to opening an invariant.
+  Owning an invariant [inv N P] is weaker than owning [P]. It still gives
+  us access to [P], but only momentarily under certain conditions. When
+  those conditions are met, we can use the [iInv] tactic to _open_ the
+  invariant, granting us access to [P].
 
   Firstly, an invariant can only be opened once before being closed
   again. This is enforced in Iris through `masks'. A mask can be thought
@@ -95,13 +100,12 @@ Proof. apply _. Qed.
   opened again. Closing an open invariant [iInv N P] corresponds to
   proving that [P] still holds.
 
-  We can only open an invariant if the goal has a mask which contains
-  [N]. As such, if the goal is a generic proposition, we cannot open any
-  invariants.
+  We can only open an invariant if the goal is an assertion that includes
+  its mask:
 *)
 
 Lemma inv_open_fail (N : namespace) (P Q : iProp Σ) :
-  inv N (P) ⊢ Q.
+  inv N P ⊢ Q.
 Proof.
   iIntros "Hinv".
   Fail iInv "Hinv" as "HP".
@@ -133,6 +137,25 @@ Abort.
 
   Let us try to see these concepts in action with a simple example.
 *)
+
+Lemma inv_open_example_attempt_0 (N : namespace) (l : loc) :
+  inv N (l ↦ #1) ⊢ WP !#l {{ v, ⌜v = #1⌝ }}.
+Proof.
+  (** We can introduce a persistent resource with the # modifier.
+    This puts it in the _persistent context_, where it will stay for
+    the whole program and be shared with all subgoals and all threads. *)
+  iIntros "#Hinv".
+  (* open the invariant *)
+  iInv "Hinv" as "Hl".
+  (** Technically, we only get the invariant's contents under a _later_
+    modality ▷. However, this goes away as soon as we take a step.
+    (See later.v for more.) *)
+  wp_load.
+  iModIntro.
+  iSplitL "Hl".
+  - iFrame.
+  - iPureIntro. reflexivity.
+Qed.
 
 Lemma inv_open_example_attempt_1 (N : namespace) (l : loc) :
   inv N (l ↦ #1) ⊢ WP !#l + !#l {{ v, ⌜v = #2⌝ }}.
@@ -389,8 +412,11 @@ Section proofs.
 Context `{!heapGS Σ}.
 Let N := nroot .@ "prog2".
 
+(** Exercise: What invariants are true of [l] in this program? What is an
+  invariant on [l] that *doesn't* hold in this program? *)
+
 (**
-  Our invariant will simply be that the location points to an integer.
+  One possible invariant is that the location points to an integer.
 *)
 Definition prog2_inv (l : loc) : iProp Σ :=
   ∃ i : Z, l ↦ #i.
@@ -442,5 +468,9 @@ Proof.
     { by iExists i. }
     by iApply "HΦ".
 Qed.
+
+(** Exercise: State and prove a specification saying that the value returned
+  by prog2 is always greater than or equal to 0. You will need to add this
+  information to the invariant as well. *)
 
 End proofs.
