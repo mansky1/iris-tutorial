@@ -86,7 +86,7 @@ graph TD;
 
   arrays --> merge[merge sort];
 
-  timeless --> cst_ra[custom resource algebra];
+  ra --> cst_ra[custom resource algebra];
   invariants --> strconc[structured concurrency];
   timeless --> ccs;
 

@@ -124,9 +124,32 @@ End parallel_add.
   We will use the name "spawn" instead of "fork", since HeapLang already
   uses "fork" for the non-returning version. *)
 
-(* !! example program; what should the specs be? *)
+Definition factorial : val :=
+  rec: "f" "n" := if: "n" = #0 then #1 else "n" * "f" ("n" - #1).
 
-(**  Considering this behaviour, we give [spawn] the specification:
+Definition spawn_join_ex (x : loc): expr :=
+  let: "h" := spawn (λ: <>, factorial #10) in
+  (* do some other work;; *)
+  let: "r" := join "h" in
+  #x <- "r".
+
+(** Unlike fork or par, the two threads communicate directly: spawning
+  a function returns a "handle" that we can use to join with it later,
+  and when we join with it we receive the value returned by that function.
+  Exercise: What should the specs for [spawn] and [join] be? *)
+
+
+
+
+
+
+
+
+
+
+
+
+  (**  We give [spawn] the specification:
 
   [[
     {{{ P }}} f #() {{{ v, RET v; Ψ v }}} -∗
@@ -207,14 +230,15 @@ Definition join_handle1 (h : val) (Ψ : val → iProp Σ) : iProp Σ :=
 Lemma join_spec (h : val) (Ψ : val → iProp Σ) :
   {{{ join_handle1 h Ψ }}} join h {{{ v, RET v; Ψ v }}}.
 Proof.
-  (* !! way too fancy *)
-  iIntros (Φ) "(%l & -> & #I) HΦ".
+  iIntros "%Φ H HΦ".
+  iDestruct "H" as "(%l & -> & #I)".
   iLöb as "IH".
   wp_rec.
   wp_bind (! _)%E.
-  iInv "I" as "(%v & Hl & [>-> | (%w & >-> & HΨ)])".
-  - wp_load.
-    iModIntro.
+  iInv "I" as "(%v & Hl & HI)".
+  wp_load.
+  iDestruct "HI" as "[% | (%w & % & HΨ)]"; subst.
+  - iModIntro.
     iSplitL "Hl".
     {
       iNext.
@@ -224,8 +248,7 @@ Proof.
     }
     wp_pures.
     by iApply "IH".
-  - wp_load.
-    iModIntro.
+  - iModIntro.
     (** 
       Now we need [HΨ] to reestablish the invariant, but we also need it
       for the postcondition. We are stuck... 
@@ -288,7 +311,7 @@ Proof.
     wp_apply ("Hf" with "HP").
     iIntros "%v HΨ".
     wp_pures.
-    iInv "I" as "(%w & Hl & _)".
+    iInv "I" as "(%w & Hl & ?)".
     wp_store.
     iModIntro.
     iSplitL; last done.
@@ -309,14 +332,16 @@ Qed.
 Lemma join_spec (Ψ : val → iProp Σ) (h : val) :
   {{{ join_handle h Ψ }}} join h {{{ v, RET v; Ψ v }}}.
 Proof.
-  iIntros (Φ) "(%γ & %l & -> & Hγ & #I) HΦ".
+  iIntros "%Φ H HΦ".
+  iDestruct "H" as "(%γ & %l & -> & Hγ & #I)".
   iLöb as "IH".
   wp_rec.
   wp_bind (! #l)%E.
   (** We open the invariant and consider the three possible states. *)
-  iInv "I" as "(%_ & Hl & [>-> | [(%w & >-> & HΨ) | >Hγ']])".
+  iInv "I" as "(%v & Hl & HI)".
+  wp_load.
+  iDestruct "HI" as "[% | [(% & % & HΨ) | Hγ']]"; subst.
   - (** Case: The forked-off thread is not yet finished. *)
-    wp_load.
     iModIntro.
     iSplitL "Hl".
     {
@@ -328,7 +353,6 @@ Proof.
     wp_pures.
     iApply ("IH" with "Hγ HΦ").
   - (** Case: The forked-off thread has finished. *)
-    wp_load.
     iModIntro.
     (**
       Note that now, since we own the token, we do not need to use [Ψ w]

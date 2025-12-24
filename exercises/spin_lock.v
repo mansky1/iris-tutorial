@@ -13,9 +13,26 @@ From iris.heap_lang Require Import lang proofmode notation.
   acquires a lock it gains access to the resource; when it releases
   the lock it gives up access to the resource.
 
-  !! example program
+Definition parallel_add : expr :=
+  let: "r" := ref #0 in
+  (FAA "r" #2)
+  |||
+  (FAA "r" #6)
+  ;;
+  !"r".
 
-  How should we specify a lock in separation logic?
+Definition parallel_add_locked : expr :=
+  let: "r" := ref #0 in
+  let: "l" := mk_lock #() in
+  (acquire "l";; "r" <- !"r" + #2;; release "l")
+  |||
+  (acquire "l";; "r" <- !"r" + #6;; release "l")
+  ;;
+  !"r".
+
+*)
+
+(** How should we specify a lock in separation logic?
   One common way of thinking about locks is _mutual exclusion_, the
   property that no two threads hold the lock at the same time. However,
   separation logic talks about *space* (resources and ownership), not time.
@@ -32,6 +49,16 @@ From iris.heap_lang Require Import lang proofmode notation.
   resources and the [locked] predicate to the lock.
 
   {{{ is_lock γ v P ∗ locked γ ∗ P }}} release v {{{ RET #(); True }}}.
+
+  Furthermore, it must be the case that no two threads can hold the lock
+  at the same time:
+
+  locked γ ∗ locked γ ⊢ False.
+
+  Without [P], the lock doesn't protect any resources, and we don't e.g.
+  gain access to "r" when we acquire it. Without [locked], we don't know
+  that only one thread holds the lock, so when we acquire it some other
+  thread might already hold [P].
 *)
 
 (* ================================================================= *)
@@ -121,10 +148,11 @@ Proof. apply token_exclusive. Qed.
 (**
   We will need our representation predicate for the lock, [is_lock], to
   be persistent so that it can be shared among participating threads.
-  Therefore, we will be needing an invariant. The invariant states that
+  Therefore, we need an invariant. The invariant states that
   the location representing the lock, [l], maps to a boolean [b], and if
   [b] is [false], meaning the lock is unlocked, then the invariant owns
-  both the protected resources and the [locked] predicate.
+  both the protected resources and the [locked] predicate. If [b] is [true],
+  some thread holds the lock, and so that thread owns [locked] and [P].
 *)
 Let N := nroot .@ "lock".
 
@@ -174,11 +202,13 @@ Qed.
 Lemma acquire_spec γ v P :
   {{{ is_lock γ v P }}} acquire v {{{ RET #(); locked γ ∗ P }}}.
 Proof.
-  iIntros "%Φ (%l & -> & #I) HΦ".
+  iIntros "%Φ H HΦ".
+  iDestruct "H" as "(%l & -> & #I)".
   iLöb as "IH".
   wp_rec.
   wp_bind (CmpXchg _ _ _).
-  iInv "I" as ([]) "[Hl Hγ]".
+  iInv "I" as "(%b & Hl & Hγ)".
+  destruct b.
   - wp_cmpxchg_fail.
     iModIntro.
     iSplitL "Hl Hγ".
@@ -205,6 +235,8 @@ Qed.
 (**
   Releasing the lock consists of transferring back the protected
   resources and the [locked] predicate to the lock.
+  Note especially: where do we see that because we hold [locked],
+  the lock must indeed be held (v ↦ #true)?
 *)
 Lemma release_spec γ v P :
   {{{ is_lock γ v P ∗ locked γ ∗ P }}} release v {{{ RET #(); True }}}.
@@ -252,7 +284,7 @@ Proof.
   wp_pures.
   wp_apply wp_fork.
   - wp_apply (acquire_spec with "Hl").
-    iIntros "(H & %v & Hx & _)".
+    iIntros "(H & %v & Hx & %)".
     wp_pures.
     wp_store.
     wp_store.
@@ -262,7 +294,7 @@ Proof.
     by iRight.
   - wp_pures.
     wp_apply (acquire_spec with "Hl").
-    iIntros "(_ & %v & Hx & Hv)".
+    iIntros "(? & %v & Hx & Hv)".
     wp_pures.
     wp_load.
     done.
