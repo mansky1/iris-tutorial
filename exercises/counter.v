@@ -67,8 +67,10 @@ Definition is_counter2 (v : val) (n : nat) : iProp Σ :=
 
 (**
   However, with this definition, we have locked the value of the pointer
-  to always be [n]. To fix this, we could abstract the value and instead
-  only specify its lower bound.
+  to always be [n]. We need to answer a fundamental question: what can
+  one thread know about the value of the counter, given that other threads
+  may concurrently increment it?
+  One answer is: a thread can know a *lower bound* on the counter's value.
 *)
 
 Definition is_counter3 (v : val) (n : nat) : iProp Σ :=
@@ -83,28 +85,23 @@ Definition is_counter3 (v : val) (n : nat) : iProp Σ :=
   composite is [n ≤ m].
 
   To achieve this, we will use the _authoritative_ resource algebra,
-  [auth]. This resource algebra is parametrised by a CMRA, [A]. There
-  are two types of elements in the carrier of the authoritative RA:
+  [auth]. This gives us two types of ghost state we can own:
   - [● x] called an authoritative element
   - [◯ y] called a fragment
-  where [x, y ∈ A].
-
-  The idea of the authoritative RA is as follows. The authoritative
-  element represents the whole of the resource, while the fragments act
-  as the pieces. To achieve this, the authoritative element acts like
-  the exclusive RA, while the fragment inherits all the operations of
-  [A]. Furthermore, validity of [● x ⋅ ◯ y] is defined as [✓ x ∧ y ≼ x].
+  The authoritative element represents the current value of the resource,
+  while the fragments act as pieces of that value.
 
   In our case, we will use the authoritative RA over the [max_nat]
   resource algebra. The carrier of [max_nat] is the natural numbers, and
-  the operation is the maximum.
+  the operation is the maximum: that is, if we combine two fragments [◯ a]
+  and [◯ b], we will obtain the fragment [◯ (max a b)].
 *)
 Context `{!inG Σ (authR max_natUR)}.
 
 (**
   As such, [● (MaxNat m)] will represent the _true_ value of the counter
   [m], and [◯ (MaxNat n)] will represent a _fragment_ of the counter – a
-  lower bound [n].
+  lower bound [n] observed by one thread.
 *)
 
 Definition is_counter (v : val) (γ : gname) (n : nat) : iProp Σ :=
@@ -119,34 +116,20 @@ Global Instance is_counter_persistent v γ n :
 
 (**
   Before we start proving the specification, let us prove some useful
-  lemmas about our ghost state. For starters, we need to know that we
-  can allocate the initial state we need.
+  lemmas about our ghost state. The statements of these lemmas are
+  important, but their proofs are not: if you want to understand them
+  in detail anyway, you'll need to read resource_algebras.v first.
 *)
 Lemma alloc_initial_state :
   ⊢ |==> ∃ γ, own γ (● MaxNat 0) ∗ own γ (◯ MaxNat 0).
 Proof.
-  (**
-    Ownership of multiple fragments of state amounts to ownership of
-    their composite. So we can simplify the goal a little.
-  *)
   setoid_rewrite <- own_op.
-  (** Now the goal is on the form expected by [own_alloc]. *)
   apply own_alloc.
-  (**
-    However, we are only allowed to allocate valid states. So we must
-    prove that our desired state is a valid one.
-
-    The validity of [auth] says that the fragment must be included in
-    the authoritative element and the authoritative element must be
-    valid.
-  *)
   apply auth_both_valid_discrete.
   split.
-  - (** Inclusion for [max_nat] turns out to be the natural ordering. *)
-    apply max_nat_included; simpl.
+  - apply max_nat_included; simpl.
     reflexivity.
-  - (** All elements of [max_nat] are valid. *)
-    cbv.
+  - cbv.
     done.
 Qed.
 
@@ -170,16 +153,7 @@ Lemma update_state γ n :
 Proof.
   iIntros "H".
   rewrite <- own_op.
-  (**
-    As we saw in the Resource Algebra chapter, to update a resource, we
-    must show that we can perform a frame preserving update to the
-    updated resource.
-  *)
   iApply (own_update with "H").
-  (**
-    [auth] has its own special version of these called _local updates_,
-    as we know what the whole of the state is.
-  *)
   apply auth_update_alloc.
   apply max_nat_local_update; cbn.
   by apply le_S.
@@ -263,20 +237,17 @@ Section spec2.
 
 (**
   Our first specification only allowed us to find a lower bound for the
-  value in [par_incr]. Any solution to this problem has to be
-  non-persistent, as we need to aggregate the knowledge to conclude the
+  value in [par_incr]. To do better, we need to go beyond persistent
+  ghost state, as we need to aggregate the knowledge to conclude the
   total value.
 
-  To this end, we will use fractions. The [frac] resource algebra is
-  similar to [dfrac] but without the capability of discarding fractions.
-  As such, [frac] consists of non-negative rationals with addition as
-  composition, and a fraction is only valid if it is less than or equal
-  to [1]. This means that all the fractions can add up to at most [1].
-  Combining [frac] with other resource algebras allows us to keep track
-  of how much of the resource we own, meaning we can do the exact kind
-  of aggregation we need. So this time, we will use the resource algebra
-  [authR (optionUR (prodR fracR natR))]. Here, [natR] is the natural
-  numbers with addition.
+  So we will try another answer to "what can each thread know": each
+  thread can know the number of times *that thread* incremented the
+  counter. Then the total counter value is the sum of every thread's
+  contribution. To this end, we will use fractions. The resource
+  algebra [authR (optionUR (prodR fracR natR))] associates each
+  fragment with a fraction; if we collect all the fractions, we know
+  that the total fragment value is the same as the authoritative value.
 *)
 
 Context `{!heapGS Σ, !inG Σ (authR (optionUR (prodR fracR natR)))}.
