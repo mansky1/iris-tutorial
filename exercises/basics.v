@@ -285,3 +285,6 @@ Proof.
 Admitted.
 
 End proofs.
+
+(* For documentation of the various Iris tactics and their arguments, see
+   https://gitlab.mpi-sws.org/iris/iris/-/blob/master/docs/proof_mode.md. *)

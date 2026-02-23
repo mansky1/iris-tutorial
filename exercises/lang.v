@@ -17,6 +17,7 @@ From iris.heap_lang Require Import lang notation spawn par.
   language, but there are a lot of notational quirks since we are working
   inside Rocq. As such, the focus in this chapter is mainly on showcasing
   the syntax of the language through simple examples.
+  See also: https://gitlab.mpi-sws.org/iris/iris/blob/master/docs/heap_lang.md
 *)
 
 (* ================================================================= *)
