@@ -90,19 +90,4 @@ Qed.
   proved inside the Iris logic is as true as anything proved in Rocq.
 *)
 
-(**
-  [⌜_⌝] turns Rocq propositions into Iris propositions, while [⊢ _] turns
-  Iris propositions into Rocq propositions. These operations are not
-  inverses, but they are related.
-*)
-Lemma pure_adj1 (φ : Prop) : φ → ⊢ ⌜φ⌝.
-Proof.
-  (* exercise *)
-Admitted.
-
-Lemma pure_adj2 (P : iProp Σ) : ⌜⊢ P⌝ -∗ P.
-Proof.
-  (* exercise *)
-Admitted.
-
 End proofs.
