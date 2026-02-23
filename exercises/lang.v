@@ -13,10 +13,10 @@ From iris.heap_lang Require Import lang notation spawn par.
   supports higher-order functions. The evaluation order is right to left
   and it is a call-by-value language.
 
-  The syntax for HeapLang is fairly standard, but there are some quirks
-  as we are working inside Rocq. As the features of HeapLang are fairly
-  standard, the focus in this chapter is mainly on showcasing the syntax
-  of the language through simple examples.
+  The basic structure of HeapLang is fairly standard for a functional
+  language, but there are a lot of notational quirks since we are working
+  inside Rocq. As such, the focus in this chapter is mainly on showcasing
+  the syntax of the language through simple examples.
 *)
 
 (* ================================================================= *)
@@ -32,27 +32,15 @@ Section heaplang.
 
 Example arith : expr :=
   #1 + #2 * #3.
-
-(**
-  If the interpreter was installed, the expression can now be executed
-  using [(exec 10 arith)], where [10] is the amount of fuel. To evaluate
-  the execution inside Rocq, we can use the [Compute] command. Uncomment
-  the command below to see this in action.
-*)
-(* Compute (exec 10 arith). *)
-(** Evaluates to [inl #7] *)
+(* Evaluates to 7 *)
 
 Example booleans : expr :=
   (arith = #7) && #true || (#true = #false).
-
-(* Compute (exec 10 booleans). *)
-(** Evaluates to [inl #true] *)
+(* Evaluates to true *)
 
 Example if_then_else : expr :=
   if: booleans then #() else #false.
-
-(* Compute (exec 10 if_then_else). *)
-(** Evaluates to [inl #()] *)
+(* Evaluates to () *)
 
 (**
   Heaplang supports let expressions. Technically, let expressions are
@@ -65,9 +53,7 @@ Example lets : expr :=
   let: "a" := #4 in
   let: "b" := #2 in
   "a" + "b".
-
-(* Compute (exec 10 lets). *)
-(** Evaluates to [inl #6] *)
+(* Evaluates to 6 *)
 
 (**
   HeapLang has native support for pairs, with tuples being notation for
@@ -77,17 +63,14 @@ Example lets : expr :=
 Example pairs : expr :=
   let: "p" := (#40, #1 + #1) in
   Fst "p" + Snd "p".
-
-(* Compute (exec 10 pairs). *)
-(** Evaluates to [inl #42] *)
+(** Evaluates to 42 *)
 
 Example tuples : expr :=
   let: "t1" := (#1, #2, #3, #4) in
   let: "t2" := (((#1, #2), #3), #4) in
   (Snd (Fst (Fst "t1")) = Snd (Fst (Fst "t2"))).
 
-(* Compute (exec 10 tuples). *)
-(** Evaluates to [inl #true] *)
+(** Evaluates to true *)
 
 (**
   We can also do pattern matching using sums. A common use case of sums
@@ -102,8 +85,7 @@ Example sums : expr :=
   | InjR "n" => "n" + #1
   end.
 
-(* Compute (exec 10 sums). *)
-(** Evaluates to [inl #2] *)
+(** Evaluates to 2 *)
 
 Example option : expr :=
   let: "r" := SOME #1 in
@@ -112,8 +94,7 @@ Example option : expr :=
   | SOME "n" => "n" + #1
   end.
 
-(* Compute (exec 10 option). *)
-(** Evaluates to [inl #2] *)
+(** Evaluates to #2 *)
 
 (**
   Finally, we have lambda abstractions and recursive functions. As with
@@ -129,8 +110,7 @@ Example lambda : expr :=
   let: "compose" := (λ: "f" "g", (λ: "x", "g" ("f" "x"))) in
   ("compose" "add5" "double") #5.
 
-(* Compute (exec 10 lambda). *)
-(** Evaluates to [inl #20] *)
+(** Evaluates to 20 *)
 
 Example recursion : expr :=
   let: "fac" :=
@@ -138,8 +118,7 @@ Example recursion : expr :=
   in
   ("fac" #4, "fac" #5).
 
-(* Compute (exec 25 recursion). *)
-(** Evaluates to [inl (#24, #120)] *)
+(** Evaluates to (24, 120) *)
 
 (* ================================================================= *)
 (** ** References *)
@@ -155,8 +134,7 @@ Example alloc : expr :=
   let: "l2" := ref (#0) in
   ("l1", "l2").
 
-(* Compute (exec 10 alloc). *)
-(** Evaluates to [inl (#(Loc 1), #(Loc 2))] *)
+(** Evaluates to ((Loc 1), (Loc 2)) *)
 
 (**
   After allocation, we can read and update the value at the returned
@@ -167,16 +145,14 @@ Example load : expr :=
   let: "l" := ref #5 in
   !"l".
 
-(* Compute (exec 10 load). *)
-(** Evaluates to [inl #5] *)
+(** Evaluates to 5 *)
 
 Example store : expr :=
   let: "l" := ref #5 in
   "l" <- #6 ;;
   !"l".
 
-(* Compute (exec 10 store). *)
-(** Evaluates to [inl #6] *)
+(** Evaluates to 6 *)
 
 (**
   To allow for synchronisation between threads, HeapLang provides a
@@ -192,15 +168,13 @@ Example cmpxchg_fail : expr :=
   let: "l" := ref #5 in
   CmpXchg "l" #6 #7.
 
-(* Compute (exec 10 cmpxchg_fail). *)
-(** Evaluates to [inl (#5, #false)] *)
+(** Evaluates to (5, false) *)
 
 Example cmpxchg_suc : expr :=
   let: "l" := ref #5 in
   CmpXchg "l" #5 #7.
 
-(* Compute (exec 10 cmpxchg_suc). *)
-(** Evaluates to [inl (#5, #true)] *)
+(** Evaluates to (5, true) *)
 
 (**
   The [notation] package defines a variant of [CmpXchg] called
@@ -220,8 +194,7 @@ Example cas : expr :=
     else
       #().
 
-(* Compute (exec 10 cas). *)
-(** Evaluates to [inl (#5, #7)] *)
+(** Evaluates to (#5, #7) *)
 
 (* ================================================================= *)
 (** ** Concurrency *)
@@ -259,7 +232,7 @@ Example spawn : expr :=
   let: "v" := !"l" in
   ("res", "v").
 
-(* Evaluates to [(2, 6)]. *)
+(* Evaluates to (2, 6). *)
 
 (**
   Using the [spawn] construct, we can define [par] which runs two
@@ -273,6 +246,6 @@ Example par : expr :=
   let: "res" := (!"l" + #1) ||| (!"l" + #2) in
   Fst "res" + Snd "res".
 
-(* Evaluates to [13]. *)
+(* Evaluates to 13. *)
 
 End heaplang.
