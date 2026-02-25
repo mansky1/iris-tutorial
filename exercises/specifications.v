@@ -71,7 +71,7 @@ Example arith : expr :=
   * it runs without crashing
   * it returns a number
   * it returns specifically the number 16
-  We can express each of these in the logic as Hoare triples:
+  We can express each of these in separation logic as Hoare triples:
   {{{ True }}} arith {{{ RET v; True }}}
   {{{ True }}} arith {{{ z : Z, RET #z; True }}}
   {{{ True }}} arith {{{ RET #16; True }}}
@@ -100,51 +100,17 @@ Proof.
     Note that the expression [#2 * #3] turned into [#(2 * 3)] – the Rocq
     expression [2 * 3] is treated as a value in HeapLang.
 
-    Under the hod, [wp_op] has here applied three underlying rules:
-    wp-bind, wp-op, and wp-val. The rule wp-bind allows us to `focus' on
-    some sub-expression [e], which is the next part to be evaluated
-    according to some evaluation context [K]. The rule is as follows:
-
-              [WP e {{ w, WP K[w] {{ v, Φ v }} }} ⊢ WP K[e] {{ v, Φ v }}]
-
-    This allows us to change the goal from
-
-    [WP (#1 + #2 * #3 + #4 + #5) {{ v, Φ v }}]
-
-    to
-
-    [WP #2 * #3 {{ w, WP (#1 + [] + #4 + #5)[w] {{ v, Φ v }} }}]
-
-    Next, the wp-op rule symbolically executes a single arithmetic
-    operation, written as [⊚].
-    [[
-                              v = v₁ ⊚ v₂
-                -------------------------------------------
-                WP v {{ v, Φ v }} ⊢ WP v₁ ⊚ v₂ {{ v, Φ v }}
-    ]]
-
-    We can thus perform the multiplication and change the goal to
-
-    [WP #(2 * 3) {{ w, WP (#1 + [] + #4 + #5)[w] {{ v, Φ v }} }}]
-
-    Finally, wp-val states that we can prove a weakest precondition of a
-    value by proving the postcondition specialised to that value.
-
-                          [Φ(v) ⊢ WP v {{ w, Φ w }}]
-
-    The goal is changed to
-
-    [WP #1 + #(2 * 3) + #4 + #5 {{ v, Φ v }}]
-
-    This is where [wp_op] has taken us. The next step of the program is
+    Under the hood, [wp_op] pulled out the next sub-expression to be
+    evaluated (in this case #2 * #3), evaluated it, and put the resulting
+    value in its place.
+    
+    The next step of the program is
     to add [#1] to [#(2 * 3)]. We could again use [wp_op] to
     symbolically execute this, but instead, we shall use the [wp_pure]
     tactic. This tactic can symbolically execute any pure expression.
   *)
   wp_pure.
   (**
-    Similarly to above, this tactic applies wp-bind, wp-op, and wp-val.
-
     If there are several pure steps in a row, we can use the [wp_pures]
     tactic, which repeatedly applies [wp_pure].
   *)
