@@ -88,7 +88,7 @@ Proof.
     that we can prove [Φ] by proving the function's postcondition. *)
   iIntros "%Φ H HΦ".
   (** Now our goal is a WP assertion. *)
-  rewrite /arith.
+  unfold arith.
   (**
     To prove this weakest precondition, we can use the tactics provided
     by [proofmode]. The initial step of the program is to multiply [#2]
@@ -171,7 +171,7 @@ Definition prog : expr :=
 Lemma prog_spec : {{{ True }}} prog {{{ RET #3; True }}}.
 Proof.
   iIntros "%Φ H HΦ".
-  rewrite /prog.
+  unfold prog.
   (**
     The initial step of [prog] is to allocate a reference containing the
     value [1]. We can symbolically execute this step of [prog] using the
@@ -283,7 +283,7 @@ Proof.
   iIntros "%Φ H HΦ".
   iDestruct "H" as "[H1 H2]".
   (** We can now prove the specification as we have done previously. *)
-  rewrite /swap.
+  unfold swap.
   wp_pures.
   wp_load.
   wp_load.

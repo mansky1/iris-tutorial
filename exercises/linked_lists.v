@@ -11,7 +11,7 @@ Context `{!heapGS Σ}.
   do this, we must first define what a linked list is. Intuitively, a
   linked list is a chain of pointers:
 
-  [1 |  ]   [2 |  ]   [3 | X]
+  [1 |  ]   [2 |  ]   [3 | NONEV]
        \____/    \____/
 
   But what is a pointer? In HeapLang we have locations that can point to
@@ -25,33 +25,42 @@ Context `{!heapGS Σ}.
   values [xs] into a predicate describing the structure of the linked list.
 *)
 
-Notation NONE := (InjL (LitV LitUnit)).
-Notation NONEV := (InjLV (LitV LitUnit)).
+Notation NONE := (InjL #()).
+Notation NONEV := (InjLV #()).
 Notation SOME x := (InjR x).
 Notation SOMEV x := (InjRV x).
 
 Fixpoint isList (l : val) (xs : list val) : iProp Σ :=
   match xs with
   | [] => ⌜l = NONEV⌝
-  | x :: xs => ∃ (hd : loc) l', ⌜l = SOMEV (#hd)⌝ ∗ hd ↦ (x, l') ∗ isList l' xs
+  | x :: xs => ∃ (hd : loc) next, ⌜l = SOMEV (#hd)⌝ ∗ hd ↦ (x, next) ∗ isList next xs
   end.
 (**
   Here, [NONEV] and [SOMEV v] are the value equivalents of [NONE] and
   [SOME e].
 *)
 
+Eval simpl in isList (SOMEV #0) (#1 :: #2 :: #3 :: nil).
+
+
 (**
   We can now define HeapLang functions that act on lists, such as [inc].
   The [inc] function recursively increments all the values of a list.
 *)
+Fixpoint inc_list (l : list Z) : list Z :=
+  match l with
+  | [] => []
+  | x :: l' => (x + 1)%Z :: inc_list l'
+  end.
+
 Definition inc : val :=
   rec: "inc" "l" :=
-    match: "l" with
+    match: "l" with (* l is a pointer, either NONE or SOME hd *)
       NONE => #()
     | SOME "hd" =>
-        let: "x" := Fst (! "hd") in
-        let: "l'" := Snd (! "hd") in
-        "hd" <- ("x" + #1, "l'");;
+        let: "x" := Fst (! "hd") in   (* hd -> val *)
+        let: "l'" := Snd (! "hd") in  (* hd -> next *)
+        "hd" <- ("x" + #1, "l'");;    (* hd->val = x + 1 *)
         "inc" "l'"
     end.
 
@@ -74,14 +83,19 @@ Proof.
     iteration, we must universally quantify over it to strengthen the induction
     hypothesis.
   *)
-  revert l.
-  induction xs as [|x xs' IH]; simpl.
+  generalize dependent l.
+  induction xs as [|x xs' IH]; intros l.
   - (* Base Case: xs = [] *)
-    iIntros (l) "%Φ %H HΦ".
-    rewrite H.
+    iIntros "%Φ H Hpost".
+    unfold inc.
     wp_rec.
-    wp_pures.
-    by iApply "HΦ".
+    fold inc.
+    simpl.
+    iDestruct "H" as "%H".
+    rewrite H.
+    wp_match.
+    iApply "Hpost".
+    done.
   - (* Induction step: xs = x :: xs' *)
     (* exercise *)
 Admitted.
