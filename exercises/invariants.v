@@ -25,8 +25,8 @@ Context `{!heapGS Σ}.
 
 Lemma wp_prog : {{{ True }}} prog {{{ v, RET v; ⌜v = #0⌝ ∨ ⌜v = #1⌝ }}}.
 Proof.
-  iIntros "%Φ _ HΦ".
-  rewrite /prog.
+  iIntros "%Φ H HΦ".
+  unfold prog.
   wp_alloc l as "Hl".
   wp_pures.
   (**
@@ -297,7 +297,7 @@ Let N := nroot .@ "myInvariant".
 Lemma inv_alloc_loc :
   {{{ True }}} ref #0 {{{(l : loc), RET #l; inv N (l ↦ #0)}}}.
 Proof.
-  iIntros (Φ) "_ HΦ".
+  iIntros "%Φ H HΦ".
   wp_alloc l as "Hl".
   (**
     We now wish to allocate the invariant using [inv_alloc]. To strip
@@ -309,7 +309,7 @@ Proof.
     As discussed, in order to allocate the invariant, we must prove that
     it holds after one step.
   *)
-  { iNext. done. }
+  { iModIntro. done. }
   (**
     With the invariant allocated, we can finish the proof.
   *)
@@ -344,12 +344,12 @@ Let N := nroot .@ "prog".
   that [l] points to either [0] or [1].
 *)
 Definition prog_inv (l : loc) : iProp Σ :=
-  ∃ v, l ↦ v ∗ (⌜v = #0⌝ ∨ ⌜v = #1⌝).
+  ∃ v, l ↦ v ∗ (⌜v = #0 ∨ v = #1⌝).
 
-Lemma wp_prog : {{{ True }}} prog {{{ v, RET v; ⌜v = #0⌝ ∨ ⌜v = #1⌝ }}}.
+Lemma wp_prog : {{{ True }}} prog {{{ v, RET v; ⌜v = #0 ∨ v = #1⌝ }}}.
 Proof.
-  iIntros (Φ) "_ HΦ".
-  rewrite /prog.
+  iIntros "%Φ H HΦ".
+  unfold prog.
   wp_alloc l as "Hl".
   wp_pures.
   (** We now allocate our [prog_inv] invariant using [inv_alloc]. *)
@@ -369,16 +369,18 @@ Proof.
   - (**
       As [#l <- #1] is atomic and the mask on the WP is [⊤], we can open the invariant.
     *)
-    iInv "Hinv" as "(%v & Hl & _)".
+    iInv "Hinv" as "Hl".
+    iDestruct "Hl" as "(%v & Hl & Hv)".
     (** We use the obtained points-to predicate to prove the WP. *)
     wp_store.
     (** We close the invariant... *)
     iSplitL.
     {
-      iIntros "!> !>".
+      iModIntro. iModIntro.
       iExists #1.
       iFrame.
-      by iRight.
+      iPureIntro.
+      auto.
     }
     (** ... and finish the proof of the forked thread. *)
     done.
@@ -423,13 +425,13 @@ Definition prog2_inv (l : loc) : iProp Σ :=
 
 Lemma prog2_spec : {{{ True }}} prog2 {{{ (i : Z), RET #i; True }}}.
 Proof.
-  iIntros "%Φ _ HΦ".
-  rewrite /prog2.
+  iIntros "%Φ H HΦ".
+  unfold prog2.
   wp_alloc l as "Hl".
   wp_pures.
   (** Like before, we allocate the invariant. *)
   iMod (inv_alloc N _ (prog2_inv l) with "[Hl]") as "#I".
-  { iNext. by iExists 0. }
+  { iModIntro. by iExists 0. }
   wp_apply wp_fork.
   - wp_pure.
     (** We use löb induction to accent the recursive calls. *)

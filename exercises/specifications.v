@@ -386,8 +386,8 @@ Lemma par_client_spec :
     par_client
   {{{ l1 l2 life, RET (#l1, #l2, #life); l1 ↦ #21 ∗ l2 ↦ #2 ∗ ⌜life = 42⌝ }}}.
 Proof.
-  iIntros (Φ _) "HΦ".
-  rewrite /par_client.
+  iIntros "%Φ H HΦ".
+  unfold par_client.
   (**
     The program starts by creating two fresh locations, [l1] and [l2].
   *)
@@ -402,8 +402,8 @@ Proof.
     the postconditions will just describe the points-to predicates,
     reflecting the writes.
   *)
-  set t1_post := (λ v : val, (l1 ↦ #21)%I).
-  set t2_post := (λ v : val, (l2 ↦ #2)%I).
+  set t1_post := (λ _ : val, (l1 ↦ #21)%I).
+  set t2_post := (λ _ : val, (l2 ↦ #2)%I).
   (**
     We can now apply the [wp_par] specification. Note how we transfer
     ownership of [l1 ↦ #0] to the first thread, and [l2 ↦ #0] to the
@@ -423,14 +423,14 @@ Proof.
     transferred back to the main thread.
   *)
   iIntros (r1 r2) "[Hl1 Hl2]".
-  rewrite /t1_post /t2_post.
+  unfold t1_post, t2_post.
   (**
     Note: the [wp_par] specification adds a later modality [▷] to the
     goal. This actually strengthens [wp_par], but we do not need that
     strength in this example, so we can simply ignore it. The [▷] can be
     introduced with [iNext].
   *)
-  iNext.
+  iModIntro.
   wp_seq.
   wp_load.
   wp_load.

@@ -127,7 +127,7 @@ Lemma append_spec (l1 l2 : val) (xs ys : list val) :
     append l1 l2
   {{{ l, RET l; isList l (xs ++ ys) }}}.
 Proof.
-  revert ys l1 l2.
+  generalize dependent l2. generalize dependent l1. generalize dependent ys.
   induction xs as [| x xs' IH]; simpl.
   (* exercise *)
 Admitted.
@@ -160,7 +160,7 @@ Lemma reverse_append_spec (l acc : val) (xs ys : list val) :
     reverse_append l acc
   {{{ v, RET v; isList v (rev xs ++ ys) }}}.
 Proof.
-  revert l acc ys.
+  generalize dependent ys. generalize dependent acc. generalize dependent l.
   induction xs as [| x xs' IH]; simpl.
   (* exercise *)
 Admitted.
@@ -229,9 +229,8 @@ Lemma fold_right_spec P I (f a l : val) xs :
     fold_right f a l
   {{{ r, RET r; isList l xs ∗ I xs r}}}.
 Proof.
-  revert a l.
-  induction xs as [|x xs IHxs].
-  all: simpl.
+  generalize dependent l. generalize dependent a.
+  induction xs as [|x xs IHxs]; simpl.
   (* exercise *)
 Admitted.
 
