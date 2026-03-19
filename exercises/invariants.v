@@ -15,7 +15,7 @@ Definition prog : expr :=
   Fork ("l" <- #1);;
   !"l".
 
-(**
+  (**
   This program will race to either update [l] or read [l], meaning the
   resulting value could be either [0] or [1].
 *)
@@ -23,7 +23,7 @@ Definition prog : expr :=
 Section proofs.
 Context `{!heapGS Σ}.
 
-Lemma wp_prog : {{{ True }}} prog {{{ v, RET v; ⌜v = #0⌝ ∨ ⌜v = #1⌝ }}}.
+Lemma wp_prog : {{{ True }}} prog {{{ v, RET v; ⌜v = #0 ∨ v = #1⌝ }}}.
 Proof.
   iIntros "%Φ H HΦ".
   unfold prog.
@@ -356,10 +356,12 @@ Proof.
   iMod (inv_alloc N _ (prog_inv l) with "[Hl]") as "#Hinv".
   (** We prove that the invariant is currently true. *)
   {
-    iNext.
+    iModIntro.
+    unfold prog_inv.
     iExists #0.
     iFrame.
-    by iLeft.
+    iLeft.
+    done.
   }
   (**
     With the invariant allocated and in the persistent context, we can
@@ -370,6 +372,7 @@ Proof.
       As [#l <- #1] is atomic and the mask on the WP is [⊤], we can open the invariant.
     *)
     iInv "Hinv" as "Hl".
+    unfold prog_inv at 2.
     iDestruct "Hl" as "(%v & Hl & Hv)".
     (** We use the obtained points-to predicate to prove the WP. *)
     wp_store.
@@ -377,6 +380,7 @@ Proof.
     iSplitL.
     {
       iModIntro. iModIntro.
+      unfold prog_inv.
       iExists #1.
       iFrame.
       iPureIntro.
@@ -410,12 +414,20 @@ Definition prog2 : expr :=
   ) #());;
   !"l".
 
+(** Exercise: What invariants are true of [l] in this program? What is an
+  invariant on [l] that *doesn't* hold in this program? *)
+
+
+
+
+
+
+
+
+
 Section proofs.
 Context `{!heapGS Σ}.
 Let N := nroot .@ "prog2".
-
-(** Exercise: What invariants are true of [l] in this program? What is an
-  invariant on [l] that *doesn't* hold in this program? *)
 
 (**
   One possible invariant is that the location points to an integer.
@@ -431,10 +443,11 @@ Proof.
   wp_pures.
   (** Like before, we allocate the invariant. *)
   iMod (inv_alloc N _ (prog2_inv l) with "[Hl]") as "#I".
-  { iModIntro. by iExists 0. }
+  { iModIntro. unfold prog2_inv. iExists 0. done. }
   wp_apply wp_fork.
   - wp_pure.
-    (** We use löb induction to accent the recursive calls. *)
+    (** We use löb induction to reason about the recursive calls -- if
+       one iteration meets its specification, then all will. *)
     iLöb as "IH".
     wp_pures.
     (**
@@ -445,30 +458,30 @@ Proof.
       First, we open it around the read.
     *)
     wp_bind (! _)%E.
-    iInv "I" as "[%i Hl]".
+    iInv "I" as "(%i & Hl)".
     wp_load.
     iModIntro.
     iSplitL "Hl".
-    { by iExists i. }
+    { unfold prog2_inv at 2. iExists i. done. }
     wp_pures.
     (**
       Next, we open it around the store.
     *)
     wp_bind (_ <- _)%E.
-    iInv "I" as "[%j Hl]".
+    iInv "I" as "(%j & Hl)".
     wp_store.
     iModIntro.
     iSplitL "Hl".
-    { by iExists (i + 1)%Z. }
+    { unfold prog2_inv at 2. iExists (i + 1)%Z. done. }
     do 2 wp_pure.
     done.
   - wp_pures.
-    iInv "I" as "[%i Hl]".
+    iInv "I" as "(%i & Hl)".
     wp_load.
     iModIntro.
     iSplitL "Hl".
-    { by iExists i. }
-    by iApply "HΦ".
+    { unfold prog2_inv at 2. iExists i. done. }
+    iApply "HΦ". done.
 Qed.
 
 (** Exercise: State and prove a specification saying that the value returned
