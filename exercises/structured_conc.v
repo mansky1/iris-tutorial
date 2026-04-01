@@ -37,6 +37,7 @@ From iris.heap_lang Require Import lang proofmode notation par.
                 {{{ P1 }}} e1 {{{ Q1 }}}   {{{ P2 }}} e2 {{{ Q2 }}}
                 ---------------------------------------------------
                     {{{ P1 ∗ P2 }}} e1 ||| e2 {{{ Q1 ∗ Q2 }}}
+
   We divide our resources into an [e1] part and an [e2] part, then recombine
   the results when both are finished. HeapLang's [par_spec] is phrased in
   terms of WP instead of triples, but otherwise says the same thing. *)
@@ -61,12 +62,9 @@ Definition parallel_add : expr :=
   !"r".
 
 Section parallel_add.
-(**
-  We must again assume the presence of the [token] resource algebra as
-  we will be using the [par] specification, which relies on it through
-  [spawn].
-*)
-Context `{!heapGS Σ, !tokenG Σ}.
+
+Context `{!heapGS Σ}.
+
 Let N := nroot .@ "par_add".
 
 (**
@@ -80,13 +78,14 @@ Definition parallel_add_inv (r : loc) : iProp Σ :=
 Lemma parallel_add_spec :
   {{{ True }}} parallel_add {{{ n, RET #n; ⌜Zeven n⌝ }}}.
 Proof.
-  iIntros "%Φ _ HΦ".
+  iIntros "%Φ H HΦ".
   rewrite /parallel_add.
   wp_alloc r as "Hr".
   wp_pures.
   iMod (inv_alloc N _ (parallel_add_inv r) with "[Hr]") as "#I".
   {
     iNext.
+    unfold parallel_add_inv.
     iExists 0.
     iFrame.
   }
@@ -98,16 +97,22 @@ Proof.
   *)
   wp_apply (par_spec (λ _, True%I) (λ _, True%I)).
   - wp_pure.
-    iInv "I" as "(%n & Hr & >%Hn)".
+    iInv "I" as "H".
+    unfold parallel_add_inv at 2.
+    iDestruct "H" as "(%n & Hr & Heven)".
     wp_faa.
     iModIntro.
-    iSplitL "Hr".
+    iSplitL "Hr Heven".
     {
       iModIntro.
+      unfold parallel_add_inv.
       iExists (n + 2)%Z.
       iFrame.
+      iDestruct "Heven" as "%Heven".
       iPureIntro.
-      by apply Zeven_plus_Zeven.
+      apply Zeven_plus_Zeven.
+      * done.
+      * done.
     }
     done.
   (* exercise *)

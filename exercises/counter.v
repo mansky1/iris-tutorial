@@ -182,9 +182,11 @@ Admitted.
 Lemma incr_spec c γ n :
   {{{ is_counter c γ n }}}
     incr c
-  {{{ (u : nat), RET #u; ⌜n ≤ u⌝ ∗ is_counter c γ (S n) }}}.
+  {{{ (u : nat), RET #u; ⌜n ≤ u⌝ ∗ is_counter c γ (S u) }}}.
 Proof.
-  iIntros "%Φ (%l & -> & #Hγ' & #HI) HΦ".
+  iIntros "%Φ H HΦ".
+  unfold is_counter at 1.
+  iDestruct "H" as "(%l & -> & #Hγ' & #HI)".
   iLöb as "IH".
   wp_rec.
   wp_bind (! _)%E.
@@ -221,7 +223,7 @@ Lemma par_incr :
     let: "c" := mk_counter #() in
     (incr "c" ||| incr "c");;
     read "c"
-  {{{ n, RET #(S n); True }}}.
+  {{{ n, RET #n; ⌜0 < n⌝ }}}.
 Proof.
   (* exercise *)
 Admitted.
@@ -400,7 +402,9 @@ Lemma incr_spec (c : val) (γ : gname) (n : nat) (q : Qp) :
     incr c
   {{{ (u : nat), RET #u; ⌜n ≤ u⌝ ∗ is_counter c γ (S n) q }}}.
 Proof.
-  iIntros "%Φ (%l & -> & Hγ' & #I) HΦ".
+  iIntros "%Φ H HΦ".
+  unfold is_counter at 1.
+  iDestruct "H" as "(%l & -> & Hγ' & #I)".
   iLöb as "IH".
   wp_rec.
   wp_bind (! _)%E.
