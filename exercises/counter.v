@@ -190,19 +190,19 @@ Proof.
   iLöb as "IH".
   wp_rec.
   wp_bind (! _)%E.
-  iInv "HI" as "(%m & Hl & Hγ)".
+  iInv "HI" as "(%v & Hl & Hγ)".
   wp_load.
   iModIntro.
   iSplitL "Hl Hγ".
-  { iExists m. iFrame. }
+  { iExists v. iFrame. }
   wp_pures.
   wp_bind (CmpXchg _ _ _).
-  iInv "HI" as "(%m' & Hl & Hγ)".
-  destruct (decide (#m = #m')) as [e | ne].
+  iInv "HI" as "(%v' & Hl & Hγ)".
+  destruct (decide (#v = #v')) as [e | ne].
   - wp_cmpxchg_suc.
     injection e as e.
     apply (inj Z.of_nat) in e.
-    subst m'.
+    subst v'.
     (* exercise *)
 Admitted.
 
@@ -408,18 +408,18 @@ Proof.
   iLöb as "IH".
   wp_rec.
   wp_bind (! _)%E.
-  iInv "I" as "(%m & Hl & Hγ)".
+  iInv "I" as "(%v & Hl & Hγ)".
   wp_load.
   iModIntro.
   iSplitL "Hl Hγ".
-  { iExists m. iFrame. }
+  { iExists v. iFrame. }
   wp_pures.
   wp_bind (CmpXchg _ _ _).
-  iInv "I" as "(%m' & Hl & Hγ)".
-  destruct (decide (# m = # m')).
+  iInv "I" as "(%v' & Hl & Hγ)".
+  destruct (decide (#v = #v')).
   - injection e as e.
     apply (inj Z.of_nat) in e.
-    subst m'.
+    subst v'.
     wp_cmpxchg_suc.
     (* exercise *)
 Admitted.
