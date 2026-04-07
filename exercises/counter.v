@@ -159,6 +159,16 @@ Proof.
   by apply le_S.
 Qed.
 
+Lemma frag_forget γ n m :
+  m ≤ n →
+  own γ (◯ MaxNat n) -∗
+  own γ (◯ MaxNat m).
+Proof.
+  intros.
+  rewrite -(max_l n m); last done.
+  iIntros "(_ & Hγ)". done.
+Qed.
+
 (* ================================================================= *)
 (** ** Proving the Counter Specification *)
 

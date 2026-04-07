@@ -63,7 +63,7 @@ Definition parallel_add : expr :=
 
 Section parallel_add.
 
-Context `{!heapGS Σ}.
+Context `{!heapGS Σ, !spawnG Σ}.
 
 Let N := nroot .@ "par_add".
 
