@@ -213,6 +213,11 @@ Section spawn.
 Context `{!heapGS Σ}.
 Let N := nroot .@ "handle".
 
+Notation NONE := (InjL #()).
+Notation NONEV := (InjLV #()).
+Notation SOME x := (InjR x).
+Notation SOMEV x := (InjRV x).
+
 (**
   Since we are using a shared channel, we will use an invariant to allow
   the two (concurrently running) threads to access it. An initial
@@ -236,24 +241,43 @@ Lemma join_spec (h : val) (Ψ : val → iProp Σ) :
   {{{ join_handle1 h Ψ }}} join h {{{ v, RET v; Ψ v }}}.
 Proof.
   iIntros "%Φ H HΦ".
-  iDestruct "H" as "(%l & -> & #I)".
+  unfold join_handle1.
+  iDestruct "H" as "(%l & -> & #I)". (* -> rewrites with the equation immediately *)
   iLöb as "IH".
+  unfold join at 2.
   wp_rec.
+  fold join.
   wp_bind (! _)%E.
   iInv "I" as "(%v & Hl & HI)".
   wp_load.
-  iDestruct "HI" as "[% | (%w & % & HΨ)]"; subst.
+  iDestruct "HI" as "[% | (%w & % & HΨ)]".
   - iModIntro.
+    rewrite H.
     iSplitL "Hl".
     {
       iNext.
+      unfold handle_inv1 at 2.
       iExists NONEV.
       iFrame.
       by iLeft.
     }
     wp_pures.
-    by iApply "IH".
-  - iModIntro.
+    iApply "IH".
+    done.
+  - rewrite H.
+    iModIntro.
+    unfold handle_inv1 at 2.
+    iSplitL "Hl HΨ".
+    { iModIntro.
+      iExists (SOMEV w).
+      iFrame.
+      iRight.
+      iExists w.
+      iFrame.
+      done.
+    }
+    wp_pures.
+    iApply "HΦ".
     (** 
       Now we need [HΨ] to reestablish the invariant, but we also need it
       for the postcondition. We are stuck... 
@@ -271,10 +295,18 @@ Abort.
 *)
 Context `{!tokenG Σ}.
 
+(* token γ is an assertion *)
+Check token _.
+
+(* We can always make a new token with a fresh name: *)
+Check token_alloc.
+(* And we can never have the same token twice: *)
+Check token_exclusive.
+
 (**
-  The trick is to have an additional state in the invariant which
+  Now, the trick is to have an additional state in the invariant which
   represents the case where [Ψ w] has been taken out of the invariant.
-  This state simply mentions the token.
+  This state simply holds the token.
 *)
 
 Definition handle_inv (γ : gname) (l : loc) (Ψ : val → iProp Σ) : iProp Σ :=
@@ -300,13 +332,18 @@ Lemma spawn_spec (P : iProp Σ) (Ψ : val → iProp Σ) (f : val) :
   {{{ P }}} spawn f {{{ h, RET h; join_handle h Ψ }}}.
 Proof.
   iIntros "#Hf %Φ !> HP HΦ".
+  (* "Hf" is {{{ P }}} f #() {{{ v, RET v; Ψ v }}} *)
+  unfold spawn.
   wp_lam.
   wp_alloc l as "Hl".
   wp_pures.
-  iMod token_alloc as "[%γ Hγ]".
+  iDestruct token_alloc as "H".
+  iMod "H" as "H".
+  iDestruct "H" as "[%γ Hγ]".
   iMod (inv_alloc N _ (handle_inv γ l Ψ) with "[Hl]") as "#I".
   {
     iNext.
+    unfold handle_inv.
     iExists NONEV.
     iFrame.
     by iLeft.
@@ -321,23 +358,30 @@ Proof.
     iModIntro.
     iSplitL; last done.
     iNext.
+    unfold handle_inv at 2.
     iExists (SOMEV v).
     iFrame.
     iRight.
     iLeft.
     iExists v.
-    by iFrame.
+    iFrame.
+    done.
   - wp_pures.
     iModIntro.
     iApply "HΦ".
+    unfold join_handle.
     iExists γ, l.
-    by iFrame "Hγ I".
+    iFrame.
+    iSplit.
+    + done.
+    + done.
 Qed.
 
 Lemma join_spec (Ψ : val → iProp Σ) (h : val) :
   {{{ join_handle h Ψ }}} join h {{{ v, RET v; Ψ v }}}.
 Proof.
   iIntros "%Φ H HΦ".
+  unfold join_handle.
   iDestruct "H" as "(%γ & %l & -> & Hγ & #I)".
   iLöb as "IH".
   wp_rec.
@@ -345,9 +389,10 @@ Proof.
   (** We open the invariant and consider the three possible states. *)
   iInv "I" as "(%v & Hl & HI)".
   wp_load.
-  iDestruct "HI" as "[% | [(% & % & HΨ) | Hγ']]"; subst.
+  iDestruct "HI" as "[% | [(% & % & HΨ) | Hγ']]".
   - (** Case: The forked-off thread is not yet finished. *)
     iModIntro.
+    rewrite H.
     iSplitL "Hl".
     {
       iNext.
@@ -359,6 +404,7 @@ Proof.
     iApply ("IH" with "Hγ HΦ").
   - (** Case: The forked-off thread has finished. *)
     iModIntro.
+    rewrite H.
     (**
       Note that now, since we own the token, we do not need to use [Ψ w]
       to close the invariant – we close it with the token.
@@ -366,16 +412,19 @@ Proof.
     iSplitL "Hγ Hl".
     {
       iNext.
+      unfold handle_inv at 2.
       iExists (SOMEV w).
       iFrame.
     }
     wp_pures.
-    by iApply "HΦ".
+    iApply "HΦ".
+    done.
   - (**
       Case: [Ψ w] has already been taken out of the invariant.
       This case is impossible as we own the token.
     *)
-    iPoseProof (token_exclusive with "Hγ Hγ'") as "[]".
+    iDestruct (token_exclusive with "Hγ Hγ'") as "H".
+    iDestruct "H" as "[]".
 Qed.
 
 End spawn.
