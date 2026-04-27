@@ -1,4 +1,4 @@
-From iris.algebra Require Export auth excl frac numbers.
+From iris.algebra Require Export auth excl frac numbers frac_auth.
 From iris.base_logic.lib Require Export invariants.
 From iris.heap_lang Require Import lang proofmode notation par.
 
@@ -258,40 +258,54 @@ Section spec2.
   counter. Then the total counter value is the sum of every thread's
   contribution. To this end, we will use fractions. The resource
   algebra [authR (optionUR (prodR fracR natR))] associates each
-  fragment with a fraction; if we collect all the fractions, we know
-  that the total fragment value is the same as the authoritative value.
+  fragment with a fraction; if we collect all the fractions (adding up
+  to 1), we know that the total fragment value is the same as the
+  authoritative value.
 *)
 
-Context `{!heapGS Σ, !inG Σ (authR (optionUR (prodR fracR natR)))}.
+Context `{!heapGS Σ, !inG Σ (frac_authR natR)}.
 
 Let N := nroot .@ "counter".
 
 Definition is_counter (v : val) (γ : gname) (n : nat) (q : Qp) : iProp Σ :=
-  ∃ l : loc, ⌜v = #l⌝ ∗ own γ (◯ Some (q, n)) ∗
-    inv N (∃ m : nat, l ↦ #m ∗ own γ (● Some (1%Qp, m))).
+  ∃ l : loc, ⌜v = #l⌝ ∗ own γ (◯F{q} n) ∗
+    inv N (∃ m : nat, l ↦ #m ∗ own γ (●F m)).
 
 (**
   With this definition, we can now decompose access to the counter by
   splitting the fraction, as well as splitting the knowledge of how much
   the counter has been incremented.
 *)
+
+(* law of frac_auth *)
+Lemma own_frac_add γ (n m : nat) (p q : Qp) :
+  own γ (◯F{p + q} (n + m)) ⊣⊢ own γ (◯F{p} n) ∗ own γ (◯F{q} m).
+Proof.
+  rewrite -own_op //.
+Qed.
+
 Lemma is_counter_add (c : val) (γ : gname) (n m : nat) (p q : Qp) :
   is_counter c γ (n + m) (p + q) ⊣⊢ is_counter c γ n p ∗ is_counter c γ m q.
 Proof.
   iSplit.
-  - iIntros "(%l & -> & [Hγ1 Hγ2] & #I)".
-    iSplitL "Hγ1".
+  - unfold is_counter at 1.
+    iIntros "(%l & -> & Hγ & #I)".
+    rewrite own_frac_add.
+    iDestruct "Hγ" as "[Hγ1 Hγ2]".
+    iSplitL "Hγ1"; unfold is_counter.
     + iExists l.
       iSplitR; first done.
       by iFrame.
     + iExists l.
       iSplitR; first done.
       by iFrame.
-  - iIntros "[(%l & -> & Hγ1 & I) (%l' & %H & Hγ2 & _)]".
+  - unfold is_counter at 1 2.
+    iIntros "[(%l & -> & Hγ1 & I) (%l' & %H & Hγ2 & _)]".
     injection H as <-.
+    unfold is_counter.
     iExists l.
     iSplitR; first done.
-    iCombine "Hγ1 Hγ2" as "Hγ".
+    rewrite own_frac_add.
     iFrame.
 Qed.
 
@@ -301,7 +315,7 @@ Qed.
   up the fragment and supply these fragments to participating threads.
 *)
 Lemma alloc_initial_state :
-  ⊢ |==> ∃ γ, own γ (● Some (1%Qp, 0)) ∗ own γ (◯ Some (1%Qp, 0)).
+  ⊢ |==> ∃ γ, own γ (●F 0) ∗ own γ (◯F 0).
 Proof.
   setoid_rewrite <-own_op.
   iApply own_alloc.
@@ -323,8 +337,8 @@ Qed.
   authoritative element.
 *)
 Lemma state_valid γ (n m : nat) (q : Qp) :
-  own γ (● Some (1%Qp, n)) -∗
-  own γ (◯ Some (q, m)) -∗
+  own γ (●F n) -∗
+  own γ (◯F{q} m) -∗
   ⌜m ≤ n⌝.
 Proof.
   iIntros "Hγ Hγ'".
@@ -346,8 +360,8 @@ Qed.
   the one in the authoritative element.
 *)
 Lemma state_valid_full γ (n m : nat) :
-  own γ (● Some (1%Qp, n)) -∗
-  own γ (◯ Some (1%Qp, m)) -∗
+  own γ (●F n) -∗
+  own γ (◯F m) -∗
   ⌜m = n⌝.
 Proof.
   iIntros "Hγ Hγ'".
@@ -368,8 +382,8 @@ Qed.
   we can increment both.
 *)
 Lemma update_state γ n m (q : Qp) :
-  own γ (● Some (1%Qp, n)) ∗ own γ (◯ Some (q, m)) ==∗
-  own γ (● Some (1%Qp, S n)) ∗ own γ (◯ Some (q, S m)).
+  own γ (●F n) ∗ own γ (◯F{q} m) ==∗
+  own γ (●F (S n)) ∗ own γ (◯F{q} (S m)).
 Proof.
   iIntros "H".
   rewrite -!own_op.
@@ -432,6 +446,20 @@ Proof.
     subst v'.
     wp_cmpxchg_suc.
     (* exercise *)
+Admitted.
+
+(* Now we can finally prove that incrementing twice in parallel
+   gives us 2: *)
+Context `{!spawnG Σ}.
+
+Lemma par_incr :
+  {{{ True }}}
+    let: "c" := mk_counter #() in
+    (incr "c" ||| incr "c");;
+    read "c"
+  {{{ n, RET #n; ⌜n = 2⌝ }}}.
+Proof.
+  (* exercise *)
 Admitted.
 
 End spec2.
